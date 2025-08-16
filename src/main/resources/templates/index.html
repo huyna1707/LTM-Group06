@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ChatBox</title>
+    <style>
+        :root{ --bg:#0f172a; --panel:#0b1220; --panel-2:#111827; --panel-3:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#7c3aed; --shadow:0 10px 30px rgba(0,0,0,.35); --radius:16px;}
+        *{box-sizing:border-box} html,body{height:100%}
+        body{ margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Inter,Roboto,Arial; }
+        .app{display:grid; grid-template-columns: 300px 1fr; height:100vh;}
+
+        /* Sidebar */
+        .sidebar{ border-right:1px solid rgba(255,255,255,.06); background:linear-gradient(180deg, rgba(255,255,255,.03), transparent 60%); display:flex; flex-direction:column; }
+        .brand{display:flex; align-items:center; gap:10px; padding:16px 18px; font-weight:700; }
+        .dot{width:10px;height:10px;border-radius:50%; background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.2)}
+        .search{padding:12px 16px;} .search input{width:100%; padding:12px 14px; border-radius:12px; background:var(--panel); color:var(--text); border:1px solid rgba(255,255,255,.07); outline:none;}
+        .list{overflow:auto; padding:8px;}
+        .item{display:flex; gap:12px; padding:10px 12px; align-items:center; border-radius:12px; cursor:pointer;}
+        .item:hover{background:rgba(255,255,255,.04)} .item.active{background:rgba(124,58,237,.15); outline:1px solid rgba(124,58,237,.25)}
+        .avatar{width:40px;height:40px;border-radius:50%;object-fit:cover; box-shadow:var(--shadow)}
+        .name{font-weight:600} .preview{font-size:12px;color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+
+        /* Profile (bottom of sidebar) */
+        .profile{margin-top:auto; border-top:1px solid rgba(255,255,255,.06); padding:10px 12px; display:flex; align-items:center; gap:12px;}
+        .profile .meta{min-width:0}
+        .profile .fullname{font-weight:700; font-size:14px}
+        .profile .role{font-size:12px; color:var(--muted)}
+        .profile .edit{margin-left:auto; display:grid; place-items:center; width:36px; height:36px; border-radius:12px; background:rgba(255,255,255,.06); border:none; color:var(--text); cursor:pointer}
+        .profile .edit:hover{background:rgba(255,255,255,.1)}
+
+        /* Main area */
+        .main{display:grid; grid-template-rows:auto 1fr auto;}
+        .header{display:flex; align-items:center; gap:12px; padding:16px 18px; background:var(--panel-3); border-bottom:1px solid rgba(255,255,255,.06);}
+        .meta{display:flex; flex-direction:column} .title{font-weight:700} .subtitle{font-size:12px;color:var(--muted)}
+
+        /* Chat */
+        .chat{position:relative; padding:18px; overflow:auto; background: radial-gradient(1200px 500px at 70% -10%, rgba(124,58,237,.18), transparent 60%), radial-gradient(1000px 400px at 10% 0%, rgba(34,197,94,.15), transparent 60%), linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));}
+        .wallpaper{position:absolute; inset:0; background-size:cover; background-position:center; opacity:.16;}
+        .messages{position:relative; display:flex; flex-direction:column; gap:12px; max-width:1100px; margin:0 auto;}
+        .row{display:flex; gap:8px; align-items:flex-end} .row.me{justify-content:flex-end}
+        .bubble{max-width:min(70%, 650px); background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.04)); border:1px solid rgba(255,255,255,.1); padding:10px 14px; border-radius:16px; box-shadow:var(--shadow); line-height:1.45;}
+        .me .bubble{background:linear-gradient(180deg, var(--accent), rgba(124,58,237,.75)); color:white; border:none; border-top-right-radius:6px;}
+        .you .bubble{border-top-left-radius:6px}
+        .stamp{font-size:11px; color:var(--muted); margin-top:4px}
+        .imgmsg{overflow:hidden; border-radius:14px; border:1px solid rgba(255,255,255,.12);} .imgmsg img{display:block; width:100%; height:auto}
+
+        /* Composer */
+        .composer{background:var(--panel-3); border-top:1px solid rgba(255,255,255,.06); padding:12px; display:flex; align-items:center; gap:10px;}
+        .field{flex:1; display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid rgba(255,255,255,.06); border-radius:14px; padding:8px 10px;}
+        .field input{flex:1; background:transparent; border:none; outline:none; color:var(--text); padding:10px 8px;}
+        .icon-btn{width:38px;height:38px; display:grid; place-items:center; border-radius:12px; border:none; cursor:pointer; background:rgba(255,255,255,.06); color:var(--text)}
+        .icon-btn:hover{background:rgba(255,255,255,.1)} .send{background:var(--accent); color:white; font-weight:700; box-shadow:0 6px 16px rgba(124,58,237,.35)}
+
+        /* Account drawer (slide-over) */
+        .drawer{position:fixed; inset:0; display:none; z-index:50}
+        .drawer.open{display:block}
+        .drawer .backdrop{position:absolute; inset:0; background:rgba(0,0,0,.5)}
+        .drawer .panel{position:absolute; top:0; right:0; height:100%; width:min(420px, 95vw); background:var(--panel-2); border-left:1px solid rgba(255,255,255,.08); box-shadow:var(--shadow); transform:translateX(100%); transition:transform .25s ease;}
+        .drawer.open .panel{transform:translateX(0)}
+        .drawer header{display:flex; align-items:center; justify-content:space-between; padding:14px 16px; background:var(--panel-3); border-bottom:1px solid rgba(255,255,255,.08); font-weight:700}
+        .drawer .content{padding:16px; overflow:auto; height:calc(100% - 56px)}
+        .form-row{display:flex; flex-direction:column; gap:6px; margin-bottom:12px}
+        .form-row label{font-size:12px; color:var(--muted)}
+        .form-row input, .form-row textarea{background:var(--panel); color:var(--text); border:1px solid rgba(255,255,255,.08); padding:10px 12px; border-radius:12px; outline:none}
+        .avatar-lg{width:84px;height:84px;border-radius:50%; object-fit:cover; box-shadow:var(--shadow); border:2px solid rgba(255,255,255,.1)}
+        .row-actions{display:flex; gap:8px}
+        .btn{border:none; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,.06); color:var(--text); cursor:pointer}
+        .btn.primary{background:var(--accent); color:#fff; font-weight:700}
+        @media (max-width: 900px){ .app{grid-template-columns:1fr} .sidebar{display:none} }
+    </style>
+</head>
+<body>
+<div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="brand"><div class="dot"></div><div>4Fxchat</div></div>
+        <div class="search"><input id="displayName" placeholder="Tên hiển thị…" /></div>
+
+        <div class="list">
+            <div class="item active">
+                <img class="avatar" src="https://i.pravatar.cc/80?img=5"/>
+                <div><div class="name">Phòng chung</div><div class="preview">Trò chuyện công khai</div></div>
+            </div>
+        </div>
+
+        <!-- Profile at bottom -->
+        <div class="profile" id="profileBtn" title="Cài đặt tài khoản">
+            <img id="sidebarAvatar" class="avatar" src="https://i.pravatar.cc/120?img=15" alt="avatar"/>
+            <div class="meta">
+                <div id="sidebarFullname" class="fullname">Thịnh Nguyễn Phước</div>
+                <div class="role">User</div>
+            </div>
+            <button class="edit" aria-label="Cài đặt">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75l11-11-3.75-3.75-11 11Zm14.71-9.71c.39-.39.39-1.02 0-1.41L15.87 4.29a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <section class="main">
+        <div class="header">
+            <img id="headerAvatar" class="avatar" src="https://i.pravatar.cc/80?img=5"/>
+            <div class="meta">
+                <div class="title">Phòng chung</div>
+                <div class="subtitle"><span id="memberCount"></span> thành viên • realtime</div>
+            </div>
+        </div>
+
+        <div class="chat">
+            <div class="wallpaper" id="wallpaper"></div>
+            <div class="messages" id="messages"></div>
+        </div>
+
+        <div class="composer">
+            <input type="file" id="file" accept="image/*" hidden />
+            <button class="icon-btn" id="attach" title="Chèn ảnh">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21 8v8a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5ZM8 7a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm9 10-3.5-4.5L11 16l-2-2-3 3h11Z"/></svg>
+            </button>
+            <div class="field"><input id="input" placeholder="Nhập tin nhắn… (Enter để gửi, Shift+Enter xuống dòng)" /></div>
+            <button class="icon-btn send" id="send"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21 23 12 2 3v7l15 2-15 2v7Z"/></svg></button>
+        </div>
+    </section>
+</div>
+
+<!-- Account drawer -->
+<div class="drawer" id="accountDrawer" aria-hidden="true">
+    <div class="backdrop" id="drawerBackdrop"></div>
+    <div class="panel" role="dialog" aria-modal="true" aria-labelledby="accTitle">
+        <header>
+            <div id="accTitle">Cài đặt tài khoản</div>
+            <button class="btn" id="closeDrawer">Đóng</button>
+        </header>
+        <div class="content">
+            <div style="display:flex; align-items:center; gap:14px; margin-bottom:12px">
+                <img id="accAvatarPreview" class="avatar-lg" src="https://i.pravatar.cc/120?img=15" alt="avatar preview"/>
+                <div class="row-actions">
+                    <input type="file" id="accAvatarInput" accept="image/*" hidden />
+                    <button class="btn" id="chooseAvatar">Đổi ảnh…</button>
+                    <button class="btn" id="resetAvatar">Ảnh mặc định</button>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label for="accFullname">Họ và tên</label>
+                <input id="accFullname" placeholder="Tên đầy đủ…" />
+            </div>
+            <div class="form-row">
+                <label for="accEmail">Email</label>
+                <input id="accEmail" placeholder="you@example.com" type="email" />
+            </div>
+            <div class="form-row">
+                <label for="accBio">Giới thiệu</label>
+                <textarea id="accBio" rows="3" placeholder="Mô tả ngắn về bạn…"></textarea>
+            </div>
+
+            <div class="row-actions">
+                <button class="btn" id="cancelChanges">Huỷ</button>
+                <button class="btn primary" id="saveProfile">Lưu thay đổi</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+<script>
+    // Wallpaper
+    const wallpapers = [
+        "https://images.unsplash.com/photo-1502082553048-f009c37129b9?q=80&w=1600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1469474968028-56623f02e42e?q=80&w=1600&auto=format&fit=crop"
+    ];
+    let wallIndex = 0;
+    const wallEl = document.getElementById("wallpaper");
+    function setWallpaper(i){ wallIndex = (i + wallpapers.length) % wallpapers.length; wallEl.style.backgroundImage = "url('" + wallpapers[wallIndex] + "')"; }
+    setWallpaper(0);
+
+    // Chat helpers
+    const msgList = document.getElementById("messages");
+    const input   = document.getElementById("input");
+    const sendBtn = document.getElementById("send");
+    const attach  = document.getElementById("attach");
+    const file    = document.getElementById("file");
+    const displayName = document.getElementById("displayName");
+
+    function timeNow(){ const d = new Date(); return d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}); }
+    function makeBubble(type, html){ return `<div class="row ${type}"><div class="bubble">${html}</div></div>`; }
+    function renderIncoming(msg, myname){
+        const mine = (msg.from || "") === myname;
+        let html = (msg.content || "").replace(/</g, "&lt;");
+        html += `<div class="stamp">${
+            new Date(msg.timestamp || Date.now()).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})
+        }${mine ? " • ✓✓" : ""}</div>`;
+        msgList.insertAdjacentHTML("beforeend", makeBubble(mine ? "me" : "you", html));
+        msgList.parentElement.scrollTop = msgList.parentElement.scrollHeight;
+    }
+
+    // ---- Nếu bạn đã bật Spring WebSocket, tự kết nối STOMP khi tải trang ----
+    let stomp = null;
+    (function connectWs(){
+        try{
+            const sock = new SockJS("/ws");
+            stomp = Stomp.over(sock);
+            stomp.debug = null;
+            stomp.connect({}, () => {
+                stomp.subscribe("/topic/public", frame => {
+                    const msg = JSON.parse(frame.body);
+                    renderIncoming(msg, displayName.value.trim());
+                });
+            });
+        }catch(e){ console.warn("Không kết nối được WebSocket (demo offline).", e); }
+    })();
+
+    function sendMessage(){
+        const name = displayName.value.trim() || "Người dùng";
+        const text = input.value.trim();
+        if (!text) return;
+        if (stomp && stomp.connected) {
+            const msg = { from: name, content: text, timestamp: Date.now() };
+            stomp.send("/app/chat.send", {}, JSON.stringify(msg));
+        } else {
+            // demo offline
+            renderIncoming({from:name, content:text, timestamp:Date.now()}, name);
+        }
+        input.value = "";
+    }
+    input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); sendMessage(); } });
+    sendBtn.onclick = sendMessage;
+
+    // Image attach (demo: gửi base64 hoặc tự xử lý upload server)
+    attach.onclick = () => file.click();
+    file.addEventListener("change", (e)=>{
+        const f = e.target.files[0]; if(!f) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+            const name = displayName.value.trim() || "Người dùng";
+            const content = "[ẢNH] " + ev.target.result.substring(0, 60) + "...";
+            if (stomp && stomp.connected) {
+                stomp.send("/app/chat.send", {}, JSON.stringify({from:name, content, timestamp:Date.now()}));
+            } else {
+                renderIncoming({from:name, content, timestamp:Date.now()}, name);
+            }
+        };
+        reader.readAsDataURL(f); e.target.value = "";
+    });
+</script>
+
+</body>
+</html>
