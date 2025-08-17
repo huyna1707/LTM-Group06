@@ -1,0 +1,53 @@
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/stompjs/lib/stomp.min.js"></script>
+
+<script>
+    let stomp;
+    const username = prompt("Tên của bạn?") || ("user"+Math.floor(Math.random()*9999));
+
+    function connect() {
+        const socket = new SockJS('/ws');
+        stomp = Stomp.over(socket);
+        stomp.connect({}, () => {
+            // phòng chung
+            stomp.subscribe('/topic/public', (frame) => {
+                const msg = JSON.parse(frame.body);
+                render(msg);
+            });
+            // tin nhắn riêng của chính mình
+            stomp.subscribe('/user/queue/messages', (frame) => {
+                const msg = JSON.parse(frame.body);
+                render(msg, true);
+            });
+
+            // thông báo join
+            stomp.send('/app/chat.send', {}, JSON.stringify({
+                type: 'JOIN',
+                sender: username,
+                content: username + ' đã vào phòng'
+            }));
+        });
+    }
+
+    function sendPublic(text){
+        stomp.send('/app/chat.send', {}, JSON.stringify({
+            type: 'CHAT', sender: username, content: text
+        }));
+    }
+    function sendPrivate(toUser, text){
+        stomp.send('/app/chat.private', {}, JSON.stringify({
+            type: 'CHAT', sender: username, to: toUser, content: text
+        }));
+    }
+
+    function render(msg, isPrivate){
+        const box = document.getElementById('chat');
+        const tag = isPrivate ? '[PM]' : '';
+        box.innerHTML += `<div>${tag} <b>${msg.sender}</b>: ${msg.content}</div>`;
+    }
+
+    window.addEventListener('load', connect);
+</script>
+
+<div id="chat" style="height:300px;overflow:auto;border:1px solid #ccc;"></div>
+<input id="text"><button onclick="sendPublic(document.getElementById('text').value)">Gửi</button>
