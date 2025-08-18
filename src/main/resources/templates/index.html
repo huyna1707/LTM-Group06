@@ -4,126 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WebChat Pro</title>
+
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
-
-        * { font-family: "Inter", sans-serif; }
-
-        .chat-container {
-            background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%);
-            transition: background 0.3s ease;
-        }
-        .dark .chat-container {
-            background: linear-gradient(135deg, #2d1b4e 0%, #1a102b 100%);
-        }
-
-        .message-bubble { animation: slideIn 0.3s ease-out; }
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .typing-indicator { animation: pulse 1.5s infinite; }
-        @keyframes pulse {
-            0%, 100% { opacity: 0.4; }
-            50% { opacity: 1; }
-        }
-
-        .scroll-smooth { scroll-behavior: smooth; }
-
-        .glass-effect {
-            backdrop-filter: blur(10px);
-            background: rgba(255, 255, 255, 0.1);
-        }
-        .dark .glass-effect { background: rgba(0, 0, 0, 0.2); }
-
-        /* Emoji lớn khi bật trong Settings */
-        .big-emoji .message-bubble p {
-            font-size: 1.125rem; /* ~18px */
-            line-height: 1.6;
-        }
-
-        /* Emoji Picker */
-        .emoji-picker {
-            width: 600px;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-        /* === Emoji tabs: tím === */
-        .emoji-tab{
-            /* kích thước */
-            padding: 0.25rem 0.5rem;   /* px-2 py-1 */
-            border-radius: 0.5rem;     /* rounded-lg */
-            font-size: 0.75rem;        /* text-xs */
-
-            /* màu tím mặc định */
-            color: #7c3aed;            /* purple-600 */
-            background: #faf5ff;       /* purple-50 */
-            border: 1px solid #e9d5ff; /* purple-200 */
-
-            transition: background .15s ease, color .15s ease, border-color .15s ease;
-        }
-        .emoji-tab:hover{
-            background: #f3e8ff;       /* purple-100 */
-        }
-
-        /* Dark mode */
-        .dark .emoji-tab{
-            color: #c4b5fd;            /* purple-300 */
-            background: rgba(124,58,237,0.12); /* tím nhạt */
-            border-color: #4c1d95;     /* purple-900 */
-        }
-        .dark .emoji-tab:hover{
-            background: rgba(124,58,237,0.2);
-        }
-
-        /* Tab đang chọn */
-        .emoji-tab[aria-selected="true"]{
-            background: #7c3aed;       /* purple-600 */
-            color: #fff;
-            border-color: #7c3aed;
-        }
-        .dark .emoji-tab[aria-selected="true"]{
-            background: #7c3aed;
-            color: #fff;
-            border-color: #7c3aed;
-        }
-
-        .emoji-btn {
-            font-size: 22px;
-            line-height: 1;
-            padding: 8px;
-            border-radius: 10px;
-            transition: transform .05s ease-in-out, background-color .15s;
-        }
-        .emoji-btn:hover { background: rgba(0,0,0,.06); transform: scale(1.05); }
-        .dark .emoji-btn:hover { background: rgba(255,255,255,.08); }
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="/js/app.js" defer></script>
 
 
-        /* Nút chọn wallpaper thumbnail */
-        .wp-item {
-            width: 100%;
-            aspect-ratio: 1 / 1;
-            border-radius: 0.75rem; /* rounded-xl */
-            border: 1px solid rgba(0,0,0,.08);
-            overflow: hidden;
-            cursor: pointer;
-            position: relative;
-        }
-        .wp-item[aria-pressed="true"] {
-            outline: 2px solid rgb(147 51 234); /* purple-600 */
-            outline-offset: 2px;
-        }
-        .wp-label {
-            position: absolute; left: 0; right: 0; bottom: 0;
-            font-size: 10px; line-height: 1;
-            padding: 6px 8px;
-            color: #111827; background: rgba(255,255,255,.7);
-            text-align: center;
-        }
-    </style>
 </head>
+
+
+
 <body class="bg-gray-100 dark:bg-gray-900 transition-colors duration-300">
 <div class="min-h-screen chat-container">
     <div class="w-full h-screen bg-white dark:bg-gray-800 overflow-hidden transition-colors duration-300 flex">
@@ -265,11 +155,17 @@
             <div class="p-4 border-t border-gray-200 dark:border-gray-700">
                 <div class="flex items-center space-x-3">
                     <div class="relative">
-                        <div class="w-12 h-12 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
+                        <!-- Ảnh thật (ẩn khi chưa có) -->
+                        <img id="profileAvatarImg" class="avatar-img" alt="Avatar">
+                        <!-- Fallback gradient khi chưa có ảnh -->
+                        <div id="profileAvatarFallback"
+                             class="w-12 h-12 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
                             <span class="text-white font-bold text-lg">👤</span>
                         </div>
                         <div id="profileDot" class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-900"></div>
                     </div>
+
+
                     <div class="flex-1 min-w-0">
                         <h3 id="profileName" class="font-semibold text-gray-900 dark:text-white truncate">Bạn</h3>
                         <p id="profileStatus" class="text-sm text-gray-500 dark:text-gray-400">Đang hoạt động</p>
@@ -307,7 +203,7 @@
                 <div class="flex items-center space-x-3">
                     <!-- Theme Toggle (Sáng/Tối toàn app) -->
                     <button id="themeToggle"
-                            class="p-3 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200 shadow-sm">
+                            class="p-3 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200 shadow-sm relative overflow-hidden">
                         <span id="lightIcon" class="text-gray-700 text-lg">🌙</span>
                         <span id="darkIcon" class="text-yellow-400 text-lg hidden">☀️</span>
                     </button>
@@ -456,6 +352,24 @@
 <div id="editProfileModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
     <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-96">
         <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Chỉnh sửa hồ sơ</h2>
+        <!-- ==== Avatar Preview + Sửa ==== -->
+        <div class="flex items-center gap-4 mb-4">
+            <div class="avatar-wrap">
+                <!-- Ảnh xem trước -->
+                <img id="editAvatarPreview" class="avatar-img" alt="Preview">
+                <!-- Fallback nếu chưa có ảnh -->
+                <div id="editAvatarFallback"
+                     class="avatar-ring bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-2xl">👤</div>
+                <button id="editAvatarBtn" type="button" class="avatar-edit-btn">Sửa</button>
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400">
+
+                <button id="removeAvatarBtn" type="button" class="avatar-remove-btn">Xóa ảnh</button>
+            </div>
+            <!-- input file ẩn -->
+            <input id="editAvatarFile" type="file" accept="image/*" class="hidden">
+        </div>
+
 
         <label class="block text-sm text-gray-600 dark:text-gray-300 mb-1">Tên hiển thị</label>
         <input id="editName" type="text" placeholder="Nhập tên hiển thị"
@@ -500,30 +414,24 @@
         <div>
             <div class="font-medium text-gray-800 dark:text-gray-200 mb-2">Hình nền đoạn chat</div>
             <div id="wpPresets" class="grid grid-cols-3 gap-3">
-                <!-- Mặc định -->
                 <button class="wp-item" data-wp="none" aria-pressed="true" style="background: linear-gradient(135deg,#f9fafb,#e5e7eb);">
                     <span class="wp-label">Mặc định</span>
                 </button>
-                <!-- Tím gradient -->
                 <button class="wp-item" data-wp="grad-purple" style="background: linear-gradient(135deg,#f5e1ff,#e7d4ff);">
                     <span class="wp-label">Tím</span>
                 </button>
-                <!-- Xanh gradient -->
                 <button class="wp-item" data-wp="grad-blue" style="background: linear-gradient(135deg,#dbeafe,#bfdbfe);">
                     <span class="wp-label">Xanh</span>
                 </button>
-                <!-- Hồng gradient -->
                 <button class="wp-item" data-wp="grad-pink" style="background: linear-gradient(135deg,#ffe4e6,#fecdd3);">
                     <span class="wp-label">Hồng</span>
                 </button>
-                <!-- Chấm bi sáng -->
                 <button class="wp-item" data-wp="dots" style="background:
           radial-gradient(#e5e7eb 1.2px, transparent 1.2px),
           radial-gradient(#e5e7eb 1.2px, transparent 1.2px);
           background-size:20px 20px,20px 20px; background-position:0 0,10px 10px; background-color:#ffffff;">
                     <span class="wp-label">Chấm bi</span>
                 </button>
-                <!-- Lưới nhạt -->
                 <button class="wp-item" data-wp="grid" style="background:
           linear-gradient(rgba(0,0,0,.06) 1px, transparent 1px),
           linear-gradient(90deg, rgba(0,0,0,.06) 1px, transparent 1px);
@@ -600,632 +508,8 @@
 <!-- Overlay khi mở settings -->
 <div id="chatSettingsOverlay" class="fixed inset-0 bg-black/40 hidden z-30"></div>
 
-<script>
-    // Theme Toggle (Sáng/Tối toàn app)
-    const themeToggle = document.getElementById("themeToggle");
-    const lightIcon = document.getElementById("lightIcon");
-    const darkIcon = document.getElementById("darkIcon");
-    const html = document.documentElement;
-
-    const currentTheme = localStorage.getItem("theme") || "light";
-    if (currentTheme === "dark") { html.classList.add("dark"); } else { html.classList.remove("dark"); }
-
-    function updateThemeIcons() {
-        const chatContainer = document.querySelector(".chat-container");
-        if (html.classList.contains("dark")) {
-            lightIcon.classList.add("hidden");
-            darkIcon.classList.remove("hidden");
-            chatContainer.style.background = "linear-gradient(135deg, #2d1b4e 0%, #1a102b 100%)";
-        } else {
-            lightIcon.classList.remove("hidden");
-            darkIcon.classList.add("hidden");
-            chatContainer.style.background = "linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%)";
-        }
-    }
-    updateThemeIcons();
-
-    themeToggle?.addEventListener("click", () => {
-        html.classList.toggle("dark");
-        const newTheme = html.classList.contains("dark") ? "dark" : "light";
-        localStorage.setItem("theme", newTheme);
-        updateThemeIcons();
-    });
-
-    // Message Functionality
-    const messageInput = document.getElementById("messageInput");
-    const sendButton = document.getElementById("sendButton");
-    const chatMessages = document.getElementById("chatMessages");
-    const typingIndicator = document.getElementById("typingIndicator");
-
-    function addMessage(text, isUser = true) {
-        const messageDiv = document.createElement("div");
-        messageDiv.className = `flex items-start space-x-3 message-bubble ${isUser ? "justify-end" : ""}`;
-
-        const time = new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
-
-        if (isUser) {
-            messageDiv.innerHTML = `
-                <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md">
-                    <p class="text-white">${text}</p>
-                    <span class="text-xs text-purple-100 mt-1 block">${time}</span>
-                </div>
-                <div class="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span class="text-white text-sm">👤</span>
-                </div>`;
-        } else {
-            messageDiv.innerHTML = `
-                <div class="w-8 h-8 bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span class="text-white text-sm">🤖</span>
-                </div>
-                <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md">
-                    <p class="text-gray-800 dark:text-gray-200">${text}</p>
-                    <span class="text-xs text-gray-500 dark:text-gray-400 mt-1 block">${time}</span>
-                </div>`;
-        }
-
-        chatMessages.insertBefore(messageDiv, typingIndicator);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    function showTyping() { typingIndicator.classList.remove("hidden"); chatMessages.scrollTop = chatMessages.scrollHeight; }
-    function hideTyping() { typingIndicator.classList.add("hidden"); }
-
-    function sendMessage() {
-        const text = messageInput.value.trim();
-        if (!text) return;
-        addMessage(text, true);
-        messageInput.value = "";
-
-        showTyping();
-        setTimeout(() => {
-            hideTyping();
-            const responses = [
-                "Cảm ơn bạn đã sử dụng WebChat Pro! 😊",
-                "Tin nhắn của bạn đã được nhận. Giao diện này có thiết kế responsive tuyệt vời! 🎨",
-                "Tôi thích cách bạn tương tác với giao diện này! ✨",
-                "WebChat Pro hỗ trợ chế độ sáng/tối và nhiều tính năng hiện đại! 🌟",
-                "Hiệu ứng bo góc và màu sắc gradient thật chuyên nghiệp! 🎯",
-            ];
-            const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-            addMessage(randomResponse, false);
-        }, 1500);
-    }
-
-    sendButton.addEventListener("click", sendMessage);
-    messageInput.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
-    messageInput.focus();
-
-    /* -------------------------
-       Modals helpers
-    ------------------------- */
-    function openModal(id) { document.getElementById(id).classList.remove("hidden"); }
-    function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
-
-    document.getElementById("addFriendBtn").addEventListener("click", () => openModal("addFriendModal"));
-    document.getElementById("createGroupBtn").addEventListener("click", () => openModal("createGroupModal"));
-
-    function timeNowLabel() {
-        const d = new Date();
-        return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
-    }
-
-    function getInitials(name) {
-        if (!name) return "UU";
-        const parts = name.trim().split(/\s+/).filter(Boolean);
-        if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    }
-
-    const gradients = [
-        "from-green-500 to-teal-500",
-        "from-blue-500 to-indigo-500",
-        "from-red-500 to-pink-500",
-        "from-purple-500 to-pink-500",
-        "from-emerald-500 to-cyan-500",
-        "from-amber-500 to-orange-600"
-    ];
-    function pickGradient(seed = 0) { return gradients[seed % gradients.length]; }
-
-    function createChatItem({ name, preview = "Tin nhắn mới", unread = true, power = 1, gradientSeed = 0 }) {
-        const initials = getInitials(name);
-        const gradient = pickGradient(gradientSeed);
-        const wrapper = document.createElement("div");
-        wrapper.className = "p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors";
-        wrapper.innerHTML = `
-            <div class="flex items-center space-x-3">
-                <div class="relative">
-                    <div class="w-12 h-12 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center">
-                        <span class="text-white font-bold">${initials}</span>
-                    </div>
-                </div>
-                <div class="flex-1 min-w-0">
-                    <div class="flex items-center space-x-2">
-                        <h3 class="font-semibold text-gray-900 dark:text-white truncate">${name}</h3>
-                        <div class="flex items-center space-x-1">
-                            <span class="text-yellow-500">⚡</span>
-                            <span class="text-xs font-bold text-yellow-600 dark:text-yellow-400">${power}</span>
-                        </div>
-                    </div>
-                    <p class="text-sm text-gray-600 dark:text-gray-400 truncate">${preview}</p>
-                    <span class="text-xs text-gray-500 dark:text-gray-500">${timeNowLabel()}</span>
-                </div>
-                ${unread ? '<div class="w-2 h-2 bg-purple-500 rounded-full"></div>' : ''}
-            </div>
-        `;
-        return wrapper;
-    }
-
-    const chatList = document.getElementById("chatList");
-
-    // Confirm Add Friend
-    document.getElementById("confirmAddFriend").addEventListener("click", () => {
-        const value = document.getElementById("friendInput").value.trim();
-        if (!value) return;
-        const name = `Người dùng ${value}`;
-        const node = createChatItem({
-            name,
-            preview: "Vừa được thêm vào danh bạ",
-            unread: true,
-            power: 1,
-            gradientSeed: value.length
-        });
-        chatList.prepend(node);
-        closeModal("addFriendModal");
-        document.getElementById("friendInput").value = "";
-    });
-
-    // Confirm Create Group
-    document.getElementById("confirmCreateGroup").addEventListener("click", () => {
-        const name = document.getElementById("groupName").value.trim();
-        const members = document.getElementById("groupMembers").value.trim();
-        if (!name || !members) return;
-
-        const membersArr = members.split(",").map(s => s.trim()).filter(Boolean);
-        const preview = `Thành viên: ${membersArr.slice(0, 3).join(", ")}${membersArr.length > 3 ? "..." : ""}`;
-
-        const node = createChatItem({
-            name,
-            preview,
-            unread: true,
-            power: Math.max(1, Math.min(12, membersArr.length)),
-            gradientSeed: name.length + membersArr.length
-        });
-        chatList.prepend(node);
-
-        closeModal("createGroupModal");
-        document.getElementById("groupName").value = "";
-        document.getElementById("groupMembers").value = "";
-    });
-
-    // ===== Edit Profile (status select + dot) =====
-    const profileNameEl   = document.getElementById("profileName");
-    const profileStatusEl = document.getElementById("profileStatus");
-    const editProfileBtn  = document.getElementById("editProfileBtn");
-    const editNameInput   = document.getElementById("editName");
-    const editStatusSelect= document.getElementById("editStatus");
-    const editPersistChk  = document.getElementById("editPersist");
-
-    // Header status UI
-    const appStatusText = document.getElementById("appStatusText");
-    const appStatusDot  = document.getElementById("appStatusDot");
-    const profileDot    = document.getElementById("profileDot");
-
-    const STATUS_MAP = {
-        active:  { label: "Đang hoạt động", colorClass: "bg-green-500"  },
-        busy:    { label: "Đang bận",       colorClass: "bg-yellow-500" },
-        offline: { label: "Tắt trạng thái hoạt động", colorClass: "bg-red-500" }
-    };
-    const STATUS_KEYS = Object.keys(STATUS_MAP);
-    const ALL_DOT_CLASSES = ["bg-green-500", "bg-yellow-500", "bg-red-500"];
-
-    function labelToKey(label = "") {
-        label = (label || "").toLowerCase().trim();
-        if (label.includes("bận")) return "busy";
-        if (label.includes("tắt")) return "offline";
-        return "active";
-    }
-
-    function updateDotsColor(dotEl, key) {
-        if (!dotEl) return;
-        dotEl.classList.remove(...ALL_DOT_CLASSES);
-        dotEl.classList.add(STATUS_MAP[key].colorClass);
-    }
-
-    function updateStatusUI(key) {
-        const { label } = STATUS_MAP[key] || STATUS_MAP.active;
-        profileStatusEl.textContent = label;
-        if (appStatusText) appStatusText.textContent = label;
-        updateDotsColor(profileDot, key);
-        updateDotsColor(appStatusDot, key);
-    }
-
-    // Init from LocalStorage on load
-    (function initProfileFromStorage(){
-        const nameFromLS   = localStorage.getItem("profileName");
-        const statusKeyLS  = localStorage.getItem("profileStatusKey");
-        const statusTextLS = localStorage.getItem("profileStatus"); // backward compatible
-
-        if (nameFromLS)   profileNameEl.textContent   = nameFromLS;
-
-        let initKey = "active";
-        if (statusKeyLS && STATUS_MAP[statusKeyLS]) {
-            initKey = statusKeyLS;
-        } else if (statusTextLS) {
-            initKey = labelToKey(statusTextLS);
-        }
-        updateStatusUI(initKey);
-        editStatusSelect.value = initKey;
-    })();
-
-    // Open modal and prefill
-    editProfileBtn.addEventListener("click", () => {
-        const currentName   = localStorage.getItem("profileName") || profileNameEl.textContent.trim() || "Bạn";
-        const currentKey    = localStorage.getItem("profileStatusKey") || labelToKey(profileStatusEl.textContent.trim());
-        editNameInput.value   = currentName;
-        editStatusSelect.value = STATUS_KEYS.includes(currentKey) ? currentKey : "active";
-        editPersistChk.checked = Boolean(localStorage.getItem("profileName") || localStorage.getItem("profileStatusKey") || localStorage.getItem("profileStatus"));
-        openModal("editProfileModal");
-    });
-
-    // Save changes profile
-    document.getElementById("saveProfileChanges").addEventListener("click", () => {
-        const newName   = editNameInput.value.trim() || "Bạn";
-        const key       = editStatusSelect.value;
-        const safeKey   = STATUS_KEYS.includes(key) ? key : "active";
-
-        profileNameEl.textContent = newName;
-        updateStatusUI(safeKey);
-
-        if (editPersistChk.checked){
-            localStorage.setItem("profileName", newName);
-            localStorage.setItem("profileStatusKey", safeKey);
-            localStorage.setItem("profileStatus", STATUS_MAP[safeKey].label);
-        } else {
-            localStorage.removeItem("profileName");
-            localStorage.removeItem("profileStatusKey");
-            localStorage.removeItem("profileStatus");
-        }
-        closeModal("editProfileModal");
-    });
-
-    // ===== Chat Settings Drawer =====
-    const chatSettingsBtn   = document.getElementById('chatSettingsBtn');
-    const chatSettingsPanel = document.getElementById('chatSettingsPanel');
-    const chatSettingsOverlay = document.getElementById('chatSettingsOverlay');
-    const closeChatSettings = document.getElementById('closeChatSettings');
-    const mainChatArea      = document.getElementById('mainChatArea');
-
-    function openChatSettings() {
-        chatSettingsPanel.classList.remove('translate-x-full');
-        chatSettingsOverlay.classList.remove('hidden');
-        mainChatArea.classList.add('mr-80'); // đẩy khung chat vào giữa
-    }
-    function closeChatSettingsPanel() {
-        chatSettingsPanel.classList.add('translate-x-full');
-        chatSettingsOverlay.classList.add('hidden');
-        mainChatArea.classList.remove('mr-80');
-    }
-
-    chatSettingsBtn?.addEventListener('click', openChatSettings);
-    closeChatSettings?.addEventListener('click', closeChatSettingsPanel);
-    chatSettingsOverlay?.addEventListener('click', closeChatSettingsPanel);
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeChatSettingsPanel(); });
-
-    // ===== Hình nền đoạn chat (Wallpaper) =====
-    const wpPresetsEl = document.getElementById('wpPresets');
-    const wpUrlInput = document.getElementById('wpUrl');
-    const applyWpUrlBtn = document.getElementById('applyWpUrl');
-    const resetWpBtn = document.getElementById('resetWp');
-
-    const WP_PRESETS = {
-        none:      { type: 'preset', key: 'none' },
-        'grad-purple': { type: 'preset', key: 'grad-purple' },
-        'grad-blue':   { type: 'preset', key: 'grad-blue' },
-        'grad-pink':   { type: 'preset', key: 'grad-pink' },
-        dots:      { type: 'preset', key: 'dots' },
-        grid:      { type: 'preset', key: 'grid' },
-    };
-
-    function applyWallpaperStyle(presetOrObj) {
-        // reset common props
-        chatMessages.style.backgroundImage = 'none';
-        chatMessages.style.backgroundSize = '';
-        chatMessages.style.backgroundPosition = '';
-        chatMessages.style.backgroundAttachment = '';
-        chatMessages.style.backgroundColor = '';
-
-        if (!presetOrObj) return;
-
-        if (presetOrObj.type === 'url') {
-            chatMessages.style.backgroundImage = `url("${presetOrObj.url}")`;
-            chatMessages.style.backgroundSize = 'cover';
-            chatMessages.style.backgroundPosition = 'center';
-            chatMessages.style.backgroundAttachment = 'fixed';
-            return;
-        }
-
-        // preset
-        switch (presetOrObj.key) {
-            case 'grad-purple':
-                chatMessages.style.backgroundImage = 'linear-gradient(135deg,#f5e1ff,#e7d4ff)';
-                break;
-            case 'grad-blue':
-                chatMessages.style.backgroundImage = 'linear-gradient(135deg,#dbeafe,#bfdbfe)';
-                break;
-            case 'grad-pink':
-                chatMessages.style.backgroundImage = 'linear-gradient(135deg,#ffe4e6,#fecdd3)';
-                break;
-            case 'dots':
-                chatMessages.style.backgroundImage =
-                    'radial-gradient(#e5e7eb 1.2px, transparent 1.2px), radial-gradient(#e5e7eb 1.2px, transparent 1.2px)';
-                chatMessages.style.backgroundSize = '20px 20px,20px 20px';
-                chatMessages.style.backgroundPosition = '0 0,10px 10px';
-                chatMessages.style.backgroundColor = '#ffffff';
-                break;
-            case 'grid':
-                chatMessages.style.backgroundImage =
-                    'linear-gradient(rgba(0,0,0,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.06) 1px, transparent 1px)';
-                chatMessages.style.backgroundSize = '24px 24px,24px 24px';
-                chatMessages.style.backgroundColor = '#ffffff';
-                break;
-            case 'none':
-            default:
-                // để nguyên nền mặc định (bg-white/dark:bg-gray-800)
-                break;
-        }
-    }
-
-    function setActivePresetButton(key) {
-        document.querySelectorAll('#wpPresets .wp-item').forEach(btn => {
-            btn.setAttribute('aria-pressed', btn.dataset.wp === key ? 'true' : 'false');
-        });
-    }
-
-    function saveWallpaper(data) {
-        localStorage.setItem('chatWallpaper', JSON.stringify(data));
-    }
-
-    function loadWallpaper() {
-        try {
-            const data = JSON.parse(localStorage.getItem('chatWallpaper') || 'null');
-            return data;
-        } catch(e) {
-            return null;
-        }
-    }
-
-    // Init wallpaper from LS
-    (function initWallpaper(){
-        const saved = loadWallpaper();
-        if (saved) {
-            applyWallpaperStyle(saved);
-            if (saved.type === 'preset') setActivePresetButton(saved.key);
-            else setActivePresetButton(''); // custom url, không chọn preset
-        } else {
-            setActivePresetButton('none');
-        }
-    })();
-
-    // Click các preset
-    wpPresetsEl?.addEventListener('click', (e) => {
-        const target = e.target.closest('.wp-item');
-        if (!target) return;
-        const key = target.dataset.wp;
-        const data = WP_PRESETS[key] || WP_PRESETS.none;
-        applyWallpaperStyle(data);
-        setActivePresetButton(key);
-        saveWallpaper(data);
-    });
-
-    // Áp dụng URL ảnh
-    applyWpUrlBtn?.addEventListener('click', () => {
-        const url = (wpUrlInput.value || '').trim();
-        if (!url) return;
-        const data = { type: 'url', url };
-        applyWallpaperStyle(data);
-        setActivePresetButton(''); // none active
-        saveWallpaper(data);
-    });
-
-    // Reset hình nền
-    resetWpBtn?.addEventListener('click', () => {
-        const data = WP_PRESETS.none;
-        applyWallpaperStyle(data);
-        setActivePresetButton('none');
-        saveWallpaper(data);
-        wpUrlInput.value = '';
-    });
-
-    // ===== Biểu tượng cảm xúc lớn =====
-    const bigEmojiToggle = document.getElementById('bigEmojiToggle');
-    (function initBigEmoji() {
-        const v = localStorage.getItem('bigEmoji') === '1';
-        bigEmojiToggle.checked = v;
-        document.body.classList.toggle('big-emoji', v);
-    })();
-    bigEmojiToggle?.addEventListener('change', (e) => {
-        const v = e.target.checked;
-        localStorage.setItem('bigEmoji', v ? '1' : '0');
-        document.body.classList.toggle('big-emoji', v);
-    });
-
-    // ===== Biệt danh =====
-    const chatTitle = document.getElementById('chatTitle');
-    const chatNicknameInput = document.getElementById('chatNicknameInput');
-    const applyNickname = document.getElementById('applyNickname');
-
-    (function initNickname() {
-        const nick = localStorage.getItem('chatNickname');
-        if (nick) {
-            chatTitle.textContent = nick;
-            chatNicknameInput.value = nick;
-        }
-    })();
-
-    applyNickname?.addEventListener('click', () => {
-        const nick = chatNicknameInput.value.trim();
-        if (nick) {
-            chatTitle.textContent = nick;
-            localStorage.setItem('chatNickname', nick);
-        } else {
-            chatTitle.textContent = 'WebChat Pro';
-            localStorage.removeItem('chatNickname');
-        }
-    });
-
-    // ===== Chặn =====
-    const blockToggle = document.getElementById('blockToggle');
-    function applyBlockState(v) {
-        messageInput.disabled = v;
-        sendButton.disabled = v;
-        messageInput.classList.toggle('opacity-60', v);
-        sendButton.classList.toggle('opacity-60', v);
-        messageInput.classList.toggle('cursor-not-allowed', v);
-        sendButton.classList.toggle('cursor-not-allowed', v);
-    }
-    (function initBlock() {
-        const blocked = localStorage.getItem('chatBlocked') === '1';
-        blockToggle.checked = blocked;
-        applyBlockState(blocked);
-    })();
-    blockToggle?.addEventListener('change', (e) => {
-        const v = e.target.checked;
-        localStorage.setItem('chatBlocked', v ? '1' : '0');
-        applyBlockState(v);
-    });
-
-    // ===== Tắt thông báo =====
-    const muteToggle = document.getElementById('muteToggle');
-    (function initMute() {
-        const muted = localStorage.getItem('chatMuted') === '1';
-        muteToggle.checked = muted;
-    })();
-    muteToggle?.addEventListener('change', (e) => {
-        const v = e.target.checked;
-        localStorage.setItem('chatMuted', v ? '1' : '0');
-    });
-
-    // ===== Xóa đoạn chat =====
-    const clearChatBtn = document.getElementById('clearChatBtn');
-    clearChatBtn?.addEventListener('click', () => {
-        Array.from(chatMessages.children).forEach(node => {
-            if (node !== typingIndicator) node.remove();
-        });
-        const info = document.createElement('div');
-        info.className = 'flex justify-center';
-        info.innerHTML = '<div class="glass-effect px-6 py-3 rounded-full text-sm text-gray-600 dark:text-gray-300">Đoạn chat đã được xóa 🗑️</div>';
-        chatMessages.appendChild(info);
-        closeChatSettingsPanel();
-    });
-</script>
-<script>
-    /* =======================
-       EMOJI PICKER
-    ======================= */
-    const emojiToggleBtn = document.getElementById('emojiToggleBtn');
-    const emojiPicker    = document.getElementById('emojiPicker');
-    const emojiGrid      = document.getElementById('emojiGrid');
-
-    const EMOJI_CATEGORIES = {
-        camxuc: "😀 😃 😄 😁 😆 😅 😂 🙂 🙃 😊 😇 😉 😍 🥰 😘 😗 😙 😚 🤗 🤩 🤔 🤨 😐 😑 😶 🙄 😏 😣 😥 😮 🤐 😯 😪 😫 🥱 😴 😌 😛 😝 😜 🤪 🤭 🤫 🤥 😬 🫠 😳 🥵 🥶 🥴 😵 🤯 🤠 🥳 😎 🤓 🧐 😕 😟 🙁 ☹️ 😮‍💨 😤 😢 😭 😖 😞 😓 😩 🤬 🤧 🤮 🤢 🤒 🤕 🥺 🙏".split(" "),
-        cucchi: "👍 👎 👋 🤚 ✋ 🖐 🖖 👌 🤌 🤏 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 ☝️ ✊ 👊 🤛 🤜 👏 🙌 👐 🤲 🙏 ✍️ 💅 🤳".split(" "),
-        dongvat: "🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🐔 🐧 🐦 🐤 🐣 🐥 🐺 🦄 🐝 🐛 🦋 🐌 🐞 🪲 🐢 🐍 🐙 🐠 🐟 🐬 🐳 🐋 🐊 🦖".split(" "),
-        doan: "🍏 🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍈 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🥑 🍆 🥔 🥕 🌽 🌶️ 🧄 🧅 🥬 🥦 🍄 🥜 🍞 🥐 🥖 🥯 🥞 🧇 🧀 🍗 🍖 🍤 🍣 🍕 🍔 🍟 🌭 🥪 🌮 🌯 🥗 🍝 🍜 🍲 🍥 🥮 🍡 🍦 🍰 🎂 🍩 🍪 🍫 🍬 🍭 🍯 🍼 ☕ 🍵 🧋 🥤 🍻 🍷 🥂 🍹".split(" "),
-        hoatdong: "⚽ 🏀 🏈 ⚾ 🎾 🏐 🏉 🎱 🏓 🏸 🥅 🥊 🥋 ⛳ 🏒 🏑 🥍 🛹 🎿 ⛷️ 🏂 🏋️‍♀️ 🤼‍♂️ 🤺 🤾‍♂️ 🧗‍♀️ 🧘‍♂️ 🏄‍♀️ 🚴‍♂️ 🚵‍♀️ 🏇 🎯 🎮 🎲 🎻 🎸 🎺 🎷 🥁 🎤 🎧".split(" ")
-    };
-
-    // Lưu thường dùng
-    function getRecentEmojis() {
-        try { return JSON.parse(localStorage.getItem('recentEmojis') || '[]'); } catch { return []; }
-    }
-    function saveRecentEmoji(e) {
-        let arr = getRecentEmojis().filter(x => x !== e);
-        arr.unshift(e);
-        if (arr.length > 24) arr = arr.slice(0, 24);
-        localStorage.setItem('recentEmojis', JSON.stringify(arr));
-    }
-
-    // render grid theo cat
-    function renderEmojiGrid(cat = 'recent') {
-        let list = [];
-        if (cat === 'recent') list = getRecentEmojis();
-        if (!list || list.length === 0) {
-            // nếu recent trống thì fallback sang camxuc
-            cat = cat === 'recent' ? 'camxuc' : cat;
-            list = EMOJI_CATEGORIES[cat] || [];
-        }
-        emojiGrid.innerHTML = '';
-        list.forEach(e => {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'emoji-btn';
-            btn.textContent = e;
-            btn.addEventListener('click', () => {
-                insertAtCursor(messageInput, e);
-                saveRecentEmoji(e);
-                messageInput.focus();
-            });
-            emojiGrid.appendChild(btn);
-        });
-    }
-
-    function setActiveTab(cat) {
-        document.querySelectorAll('#emojiPicker .emoji-tab').forEach(t => {
-            t.setAttribute('aria-selected', t.dataset.cat === cat ? 'true' : 'false');
-        });
-        renderEmojiGrid(cat);
-    }
-
-    // chèn vào vị trí con trỏ
-    function insertAtCursor(input, text) {
-        const start = input.selectionStart ?? input.value.length;
-        const end   = input.selectionEnd   ?? input.value.length;
-        const before = input.value.slice(0, start);
-        const after  = input.value.slice(end);
-        input.value = before + text + after;
-        const newPos = start + text.length;
-        input.setSelectionRange(newPos, newPos);
-    }
-
-    // mở/đóng picker
-    function openEmojiPicker() {
-        emojiPicker.classList.remove('hidden');
-        emojiToggleBtn.setAttribute('aria-expanded', 'true');
-        setActiveTab('recent');
-    }
-    function closeEmojiPicker() {
-        emojiPicker.classList.add('hidden');
-        emojiToggleBtn.setAttribute('aria-expanded', 'false');
-    }
-
-    emojiToggleBtn?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (emojiPicker.classList.contains('hidden')) openEmojiPicker();
-        else closeEmojiPicker();
-    });
-
-    // click tab
-    emojiPicker?.addEventListener('click', (e) => {
-        const tab = e.target.closest('.emoji-tab');
-        if (tab) {
-            setActiveTab(tab.dataset.cat);
-        }
-    });
-
-    // đóng khi click ngoài
-    document.addEventListener('click', (e) => {
-        if (!emojiPicker.classList.contains('hidden')) {
-            if (!emojiPicker.contains(e.target) && e.target !== emojiToggleBtn) {
-                closeEmojiPicker();
-            }
-        }
-    });
-    // ESC để đóng
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeEmojiPicker(); });
-
-    // init lần đầu
-    renderEmojiGrid('recent');
-</script>
+<!-- JS chính -->
+<script src="../static/js/app.js"></script>
 
 <!-- Cloudflare snippet giữ nguyên -->
 <script>

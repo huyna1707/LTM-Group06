@@ -1,0 +1,203 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+
+* { font-family: "Inter", sans-serif; }
+
+.chat-container {
+    background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%);
+    transition: background 0.3s ease;
+}
+.dark .chat-container {
+    background: linear-gradient(135deg, #2d1b4e 0%, #1a102b 100%);
+}
+
+.message-bubble { animation: slideIn 0.3s ease-out; }
+@keyframes slideIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.typing-indicator { animation: pulse 1.5s infinite; }
+@keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+}
+
+.scroll-smooth { scroll-behavior: smooth; }
+
+.glass-effect {
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.1);
+}
+.dark .glass-effect { background: rgba(0, 0, 0, 0.2); }
+
+/* Emoji lớn khi bật trong Settings */
+.big-emoji .message-bubble p {
+    font-size: 1.125rem;
+    line-height: 1.6;
+}
+
+/* Emoji Picker */
+.emoji-picker { width: 600px; max-height: 300px; overflow-y: auto; }
+
+/* Emoji tabs tím */
+.emoji-tab{
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.5rem;
+    font-size: 0.75rem;
+    color: #7c3aed;            /* purple-600 */
+    background: #faf5ff;       /* purple-50 */
+    border: 1px solid #e9d5ff; /* purple-200 */
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.emoji-tab:hover{ background: #f3e8ff; }
+
+.dark .emoji-tab{
+    color: #c4b5fd;            /* purple-300 */
+    background: rgba(124,58,237,0.12);
+    border-color: #4c1d95;     /* purple-900 */
+}
+.dark .emoji-tab:hover{ background: rgba(124,58,237,0.2); }
+
+.emoji-tab[aria-selected="true"]{
+    background: #7c3aed;
+    color: #fff;
+    border-color: #7c3aed;
+}
+.dark .emoji-tab[aria-selected="true"]{
+    background: #7c3aed;
+    color: #fff;
+    border-color: #7c3aed;
+}
+
+.emoji-btn {
+    font-size: 22px;
+    line-height: 1;
+    padding: 8px;
+    border-radius: 10px;
+    transition: transform .05s ease-in-out, background-color .15s;
+}
+.emoji-btn:hover { background: rgba(0,0,0,.06); transform: scale(1.05); }
+.dark .emoji-btn:hover { background: rgba(255,255,255,.08); }
+
+/* Nút chọn wallpaper thumbnail */
+.wp-item {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(0,0,0,.08);
+    overflow: hidden;
+    cursor: pointer;
+    position: relative;
+}
+.wp-item[aria-pressed="true"] {
+    outline: 2px solid rgb(147 51 234);
+    outline-offset: 2px;
+}
+.wp-label {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    font-size: 10px; line-height: 1;
+    padding: 6px 8px;
+    color: #111827; background: rgba(255,255,255,.7);
+    text-align: center;
+}
+
+/* ============================
+   Hiệu ứng mặt trời trắng sáng
+============================ */
+.sun-flash {
+    box-shadow:
+            0 0 0 2px rgba(255,255,255,0.85),
+            0 0 24px 8px rgba(255,255,255,0.65),
+            inset 0 0 12px rgba(255,255,255,0.55);
+    background: #ffffff !important;
+}
+@keyframes sunBlink {
+    0%   { box-shadow: 0 0 0 0 rgba(255,255,255,0.0); }
+    40%  { box-shadow: 0 0 24px 8px rgba(255,255,255,0.65); }
+    100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.0); }
+}
+.sun-flash-anim { animation: sunBlink .45s ease-out; }
+
+
+/* ==== Avatar (sidebar + modal) ==== */
+.avatar-img {
+    display: none;
+    width: 100%;
+    height: 100%;
+    border-radius: 9999px;
+    object-fit: cover;
+}
+
+/* Sidebar: kích thước 48px (w-12 h-12) đã có sẵn từ Tailwind */
+#profileAvatarImg { width: 3rem; height: 3rem; }
+
+/* Modal: khung xem trước 96px */
+.avatar-wrap {
+    position: relative;
+    width: 96px;
+    height: 96px;
+}
+.avatar-ring {
+    width: 100%;
+    height: 100%;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(120px 120px at 30% 30%, rgba(124,58,237,.25), rgba(124,58,237,0));
+    color: #fff;
+    font-size: 28px;
+    user-select: none;
+    border: 1px solid rgba(124,58,237,.25);
+    box-shadow: 0 6px 16px rgba(124,58,237,.25), inset 0 0 0 6px rgba(255,255,255,.06);
+}
+.dark .avatar-ring {
+    background: radial-gradient(120px 120px at 30% 30%, rgba(124,58,237,.18), rgba(124,58,237,0));
+    border-color: rgba(124,58,237,.35);
+}
+
+/* Nút “Sửa” (floating) */
+.avatar-edit-btn {
+    position: absolute;
+    right: -6px;
+    bottom: -6px;
+    padding: 8px 12px;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid rgba(255,255,255,.15);
+    box-shadow: 0 6px 14px rgba(124,58,237,.35);
+    transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+}
+.avatar-edit-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(124,58,237,.45); }
+.avatar-edit-btn:active { transform: translateY(0); box-shadow: 0 4px 10px rgba(124,58,237,.25); }
+
+/* Nút “Xóa ảnh” (phụ) */
+.avatar-remove-btn{
+    margin-left: .5rem;
+    font-size: 12px;
+    padding: 8px 12px;
+    border-radius: 9999px;
+    background: #eef2ff;            /* indigo-50 */
+    color: #3730a3;                  /* indigo-800 */
+    border: 1px solid #e0e7ff;       /* indigo-100 */
+    transition: background .12s ease, transform .12s ease, box-shadow .12s ease;
+}
+.avatar-remove-btn:hover { background: #e0e7ff; box-shadow: 0 4px 10px rgba(99,102,241,.18); transform: translateY(-1px); }
+.avatar-remove-btn:active { transform: translateY(0); }
+
+.dark .avatar-remove-btn{
+    background:#1f2937;              /* gray-800 */
+    color:#e5e7eb;
+    border-color:#374151;            /* gray-700 */
+}
+
+/* Hàng mô tả nhỏ cạnh avatar */
+.avatar-note {
+    font-size: 12px;
+    line-height: 1.4;
+    color: #6b7280;                  /* gray-500 */
+}
+.dark .avatar-note { color: #9ca3af; } /* gray-400 */
