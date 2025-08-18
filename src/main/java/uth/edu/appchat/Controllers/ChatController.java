@@ -1,6 +1,6 @@
-package com.example.demo.Controller;
+package uth.edu.appchat.Controllers;
 
-import com.example.demo.model.ChatMessage;
+import uth.edu.appchat.Models.ChatMessage;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.handler.annotation.SendTo;

@@ -1,4 +1,4 @@
-package com.example.demo.model;
+package uth.edu.appchat.Models;
 
 public class ChatMessage {
     private String from;

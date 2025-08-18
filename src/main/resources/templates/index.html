@@ -1,251 +1,1267 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ChatBox</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebChat Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        :root{ --bg:#0f172a; --panel:#0b1220; --panel-2:#111827; --panel-3:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#7c3aed; --shadow:0 10px 30px rgba(0,0,0,.35); --radius:16px;}
-        *{box-sizing:border-box} html,body{height:100%}
-        body{ margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Inter,Roboto,Arial; }
-        .app{display:grid; grid-template-columns: 300px 1fr; height:100vh;}
+        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
 
-        /* Sidebar */
-        .sidebar{ border-right:1px solid rgba(255,255,255,.06); background:linear-gradient(180deg, rgba(255,255,255,.03), transparent 60%); display:flex; flex-direction:column; }
-        .brand{display:flex; align-items:center; gap:10px; padding:16px 18px; font-weight:700; }
-        .dot{width:10px;height:10px;border-radius:50%; background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.2)}
-        .search{padding:12px 16px;} .search input{width:100%; padding:12px 14px; border-radius:12px; background:var(--panel); color:var(--text); border:1px solid rgba(255,255,255,.07); outline:none;}
-        .list{overflow:auto; padding:8px;}
-        .item{display:flex; gap:12px; padding:10px 12px; align-items:center; border-radius:12px; cursor:pointer;}
-        .item:hover{background:rgba(255,255,255,.04)} .item.active{background:rgba(124,58,237,.15); outline:1px solid rgba(124,58,237,.25)}
-        .avatar{width:40px;height:40px;border-radius:50%;object-fit:cover; box-shadow:var(--shadow)}
-        .name{font-weight:600} .preview{font-size:12px;color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+        * { font-family: "Inter", sans-serif; }
 
-        /* Profile (bottom of sidebar) */
-        .profile{margin-top:auto; border-top:1px solid rgba(255,255,255,.06); padding:10px 12px; display:flex; align-items:center; gap:12px;}
-        .profile .meta{min-width:0}
-        .profile .fullname{font-weight:700; font-size:14px}
-        .profile .role{font-size:12px; color:var(--muted)}
-        .profile .edit{margin-left:auto; display:grid; place-items:center; width:36px; height:36px; border-radius:12px; background:rgba(255,255,255,.06); border:none; color:var(--text); cursor:pointer}
-        .profile .edit:hover{background:rgba(255,255,255,.1)}
+        .chat-container {
+            background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%);
+            transition: background 0.3s ease;
+        }
+        .dark .chat-container {
+            background: linear-gradient(135deg, #2d1b4e 0%, #1a102b 100%);
+        }
 
-        /* Main area */
-        .main{display:grid; grid-template-rows:auto 1fr auto;}
-        .header{display:flex; align-items:center; gap:12px; padding:16px 18px; background:var(--panel-3); border-bottom:1px solid rgba(255,255,255,.06);}
-        .meta{display:flex; flex-direction:column} .title{font-weight:700} .subtitle{font-size:12px;color:var(--muted)}
+        .message-bubble { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
 
-        /* Chat */
-        .chat{position:relative; padding:18px; overflow:auto; background: radial-gradient(1200px 500px at 70% -10%, rgba(124,58,237,.18), transparent 60%), radial-gradient(1000px 400px at 10% 0%, rgba(34,197,94,.15), transparent 60%), linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));}
-        .wallpaper{position:absolute; inset:0; background-size:cover; background-position:center; opacity:.16;}
-        .messages{position:relative; display:flex; flex-direction:column; gap:12px; max-width:1100px; margin:0 auto;}
-        .row{display:flex; gap:8px; align-items:flex-end} .row.me{justify-content:flex-end}
-        .bubble{max-width:min(70%, 650px); background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.04)); border:1px solid rgba(255,255,255,.1); padding:10px 14px; border-radius:16px; box-shadow:var(--shadow); line-height:1.45;}
-        .me .bubble{background:linear-gradient(180deg, var(--accent), rgba(124,58,237,.75)); color:white; border:none; border-top-right-radius:6px;}
-        .you .bubble{border-top-left-radius:6px}
-        .stamp{font-size:11px; color:var(--muted); margin-top:4px}
-        .imgmsg{overflow:hidden; border-radius:14px; border:1px solid rgba(255,255,255,.12);} .imgmsg img{display:block; width:100%; height:auto}
+        .typing-indicator { animation: pulse 1.5s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
 
-        /* Composer */
-        .composer{background:var(--panel-3); border-top:1px solid rgba(255,255,255,.06); padding:12px; display:flex; align-items:center; gap:10px;}
-        .field{flex:1; display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid rgba(255,255,255,.06); border-radius:14px; padding:8px 10px;}
-        .field input{flex:1; background:transparent; border:none; outline:none; color:var(--text); padding:10px 8px;}
-        .icon-btn{width:38px;height:38px; display:grid; place-items:center; border-radius:12px; border:none; cursor:pointer; background:rgba(255,255,255,.06); color:var(--text)}
-        .icon-btn:hover{background:rgba(255,255,255,.1)} .send{background:var(--accent); color:white; font-weight:700; box-shadow:0 6px 16px rgba(124,58,237,.35)}
+        .scroll-smooth { scroll-behavior: smooth; }
 
-        /* Account drawer (slide-over) */
-        .drawer{position:fixed; inset:0; display:none; z-index:50}
-        .drawer.open{display:block}
-        .drawer .backdrop{position:absolute; inset:0; background:rgba(0,0,0,.5)}
-        .drawer .panel{position:absolute; top:0; right:0; height:100%; width:min(420px, 95vw); background:var(--panel-2); border-left:1px solid rgba(255,255,255,.08); box-shadow:var(--shadow); transform:translateX(100%); transition:transform .25s ease;}
-        .drawer.open .panel{transform:translateX(0)}
-        .drawer header{display:flex; align-items:center; justify-content:space-between; padding:14px 16px; background:var(--panel-3); border-bottom:1px solid rgba(255,255,255,.08); font-weight:700}
-        .drawer .content{padding:16px; overflow:auto; height:calc(100% - 56px)}
-        .form-row{display:flex; flex-direction:column; gap:6px; margin-bottom:12px}
-        .form-row label{font-size:12px; color:var(--muted)}
-        .form-row input, .form-row textarea{background:var(--panel); color:var(--text); border:1px solid rgba(255,255,255,.08); padding:10px 12px; border-radius:12px; outline:none}
-        .avatar-lg{width:84px;height:84px;border-radius:50%; object-fit:cover; box-shadow:var(--shadow); border:2px solid rgba(255,255,255,.1)}
-        .row-actions{display:flex; gap:8px}
-        .btn{border:none; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,.06); color:var(--text); cursor:pointer}
-        .btn.primary{background:var(--accent); color:#fff; font-weight:700}
-        @media (max-width: 900px){ .app{grid-template-columns:1fr} .sidebar{display:none} }
+        .glass-effect {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .dark .glass-effect { background: rgba(0, 0, 0, 0.2); }
+
+        /* Emoji lớn khi bật trong Settings */
+        .big-emoji .message-bubble p {
+            font-size: 1.125rem; /* ~18px */
+            line-height: 1.6;
+        }
+
+        /* Emoji Picker */
+        .emoji-picker {
+            width: 600px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        /* === Emoji tabs: tím === */
+        .emoji-tab{
+            /* kích thước */
+            padding: 0.25rem 0.5rem;   /* px-2 py-1 */
+            border-radius: 0.5rem;     /* rounded-lg */
+            font-size: 0.75rem;        /* text-xs */
+
+            /* màu tím mặc định */
+            color: #7c3aed;            /* purple-600 */
+            background: #faf5ff;       /* purple-50 */
+            border: 1px solid #e9d5ff; /* purple-200 */
+
+            transition: background .15s ease, color .15s ease, border-color .15s ease;
+        }
+        .emoji-tab:hover{
+            background: #f3e8ff;       /* purple-100 */
+        }
+
+        /* Dark mode */
+        .dark .emoji-tab{
+            color: #c4b5fd;            /* purple-300 */
+            background: rgba(124,58,237,0.12); /* tím nhạt */
+            border-color: #4c1d95;     /* purple-900 */
+        }
+        .dark .emoji-tab:hover{
+            background: rgba(124,58,237,0.2);
+        }
+
+        /* Tab đang chọn */
+        .emoji-tab[aria-selected="true"]{
+            background: #7c3aed;       /* purple-600 */
+            color: #fff;
+            border-color: #7c3aed;
+        }
+        .dark .emoji-tab[aria-selected="true"]{
+            background: #7c3aed;
+            color: #fff;
+            border-color: #7c3aed;
+        }
+
+        .emoji-btn {
+            font-size: 22px;
+            line-height: 1;
+            padding: 8px;
+            border-radius: 10px;
+            transition: transform .05s ease-in-out, background-color .15s;
+        }
+        .emoji-btn:hover { background: rgba(0,0,0,.06); transform: scale(1.05); }
+        .dark .emoji-btn:hover { background: rgba(255,255,255,.08); }
+
+
+        /* Nút chọn wallpaper thumbnail */
+        .wp-item {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            border-radius: 0.75rem; /* rounded-xl */
+            border: 1px solid rgba(0,0,0,.08);
+            overflow: hidden;
+            cursor: pointer;
+            position: relative;
+        }
+        .wp-item[aria-pressed="true"] {
+            outline: 2px solid rgb(147 51 234); /* purple-600 */
+            outline-offset: 2px;
+        }
+        .wp-label {
+            position: absolute; left: 0; right: 0; bottom: 0;
+            font-size: 10px; line-height: 1;
+            padding: 6px 8px;
+            color: #111827; background: rgba(255,255,255,.7);
+            text-align: center;
+        }
     </style>
 </head>
-<body>
-<div class="app">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-        <div class="brand"><div class="dot"></div><div>4Fxchat</div></div>
-        <div class="search"><input id="displayName" placeholder="Tên hiển thị…" /></div>
-
-        <div class="list">
-            <div class="item active">
-                <img class="avatar" src="https://i.pravatar.cc/80?img=5"/>
-                <div><div class="name">Phòng chung</div><div class="preview">Trò chuyện công khai</div></div>
-            </div>
-        </div>
-
-        <!-- Profile at bottom -->
-        <div class="profile" id="profileBtn" title="Cài đặt tài khoản">
-            <img id="sidebarAvatar" class="avatar" src="https://i.pravatar.cc/120?img=15" alt="avatar"/>
-            <div class="meta">
-                <div id="sidebarFullname" class="fullname">Thịnh Nguyễn Phước</div>
-                <div class="role">User</div>
-            </div>
-            <button class="edit" aria-label="Cài đặt">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75l11-11-3.75-3.75-11 11Zm14.71-9.71c.39-.39.39-1.02 0-1.41L15.87 4.29a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>
-            </button>
-        </div>
-    </aside>
-
-    <!-- Main -->
-    <section class="main">
-        <div class="header">
-            <img id="headerAvatar" class="avatar" src="https://i.pravatar.cc/80?img=5"/>
-            <div class="meta">
-                <div class="title">Phòng chung</div>
-                <div class="subtitle"><span id="memberCount"></span> thành viên • realtime</div>
-            </div>
-        </div>
-
-        <div class="chat">
-            <div class="wallpaper" id="wallpaper"></div>
-            <div class="messages" id="messages"></div>
-        </div>
-
-        <div class="composer">
-            <input type="file" id="file" accept="image/*" hidden />
-            <button class="icon-btn" id="attach" title="Chèn ảnh">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21 8v8a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5ZM8 7a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm9 10-3.5-4.5L11 16l-2-2-3 3h11Z"/></svg>
-            </button>
-            <div class="field"><input id="input" placeholder="Nhập tin nhắn… (Enter để gửi, Shift+Enter xuống dòng)" /></div>
-            <button class="icon-btn send" id="send"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21 23 12 2 3v7l15 2-15 2v7Z"/></svg></button>
-        </div>
-    </section>
-</div>
-
-<!-- Account drawer -->
-<div class="drawer" id="accountDrawer" aria-hidden="true">
-    <div class="backdrop" id="drawerBackdrop"></div>
-    <div class="panel" role="dialog" aria-modal="true" aria-labelledby="accTitle">
-        <header>
-            <div id="accTitle">Cài đặt tài khoản</div>
-            <button class="btn" id="closeDrawer">Đóng</button>
-        </header>
-        <div class="content">
-            <div style="display:flex; align-items:center; gap:14px; margin-bottom:12px">
-                <img id="accAvatarPreview" class="avatar-lg" src="https://i.pravatar.cc/120?img=15" alt="avatar preview"/>
-                <div class="row-actions">
-                    <input type="file" id="accAvatarInput" accept="image/*" hidden />
-                    <button class="btn" id="chooseAvatar">Đổi ảnh…</button>
-                    <button class="btn" id="resetAvatar">Ảnh mặc định</button>
+<body class="bg-gray-100 dark:bg-gray-900 transition-colors duration-300">
+<div class="min-h-screen chat-container">
+    <div class="w-full h-screen bg-white dark:bg-gray-800 overflow-hidden transition-colors duration-300 flex">
+        <!-- Sidebar Menu -->
+        <div class="w-80 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+            <!-- App Header -->
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <div class="flex items-center space-x-3 mb-4">
+                    <div class="w-10 h-10 bg-gradient-to-r from-purple-500 to-purple-700 rounded-xl flex items-center justify-center">
+                        <span class="text-white font-bold text-lg">💬</span>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold text-gray-900 dark:text-white">WebChat Pro</h1>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Kết nối mọi lúc</p>
+                    </div>
                 </div>
             </div>
 
-            <div class="form-row">
-                <label for="accFullname">Họ và tên</label>
-                <input id="accFullname" placeholder="Tên đầy đủ…" />
-            </div>
-            <div class="form-row">
-                <label for="accEmail">Email</label>
-                <input id="accEmail" placeholder="you@example.com" type="email" />
-            </div>
-            <div class="form-row">
-                <label for="accBio">Giới thiệu</label>
-                <textarea id="accBio" rows="3" placeholder="Mô tả ngắn về bạn…"></textarea>
+            <!-- Search Section -->
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                <div class="relative">
+                    <input type="text" placeholder="Tìm kiếm cuộc trò chuyện..."
+                           class="w-full px-4 py-3 pl-10 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-400" />
+                    <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </div>
             </div>
 
-            <div class="row-actions">
-                <button class="btn" id="cancelChanges">Huỷ</button>
-                <button class="btn primary" id="saveProfile">Lưu thay đổi</button>
+            <!-- Chat List -->
+            <div class="flex-1 overflow-y-auto">
+                <div id="chatList" class="p-2 space-y-1">
+                    <!-- Active Chat -->
+                    <div class="p-3 rounded-xl bg-purple-100 dark:bg-purple-900/30 border-l-4 border-purple-500 cursor-pointer">
+                        <div class="flex items-center space-x-3">
+                            <div class="relative">
+                                <div class="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                                    <span class="text-white font-bold">AI</span>
+                                </div>
+                                <div class="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white dark:border-gray-900"></div>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center space-x-2">
+                                    <h3 class="font-semibold text-gray-900 dark:text-white truncate">AI Assistant</h3>
+                                    <div class="flex items-center space-x-1">
+                                        <span class="text-yellow-500">⚡</span>
+                                        <span class="text-xs font-bold text-yellow-600 dark:text-yellow-400">7</span>
+                                    </div>
+                                </div>
+                                <p class="text-sm text-gray-600 dark:text-gray-400 truncate">Hiệu ứng bo góc và màu sắc rất chuyên nghiệp!</p>
+                                <span class="text-xs text-gray-500 dark:text-gray-500">14:35</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Other Chats -->
+                    <div class="p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors">
+                        <div class="flex items-center space-x-3">
+                            <div class="relative">
+                                <div class="w-12 h-12 bg-gradient-to-r from-green-500 to-teal-500 rounded-full flex items-center justify-center">
+                                    <span class="text-white font-bold">AN</span>
+                                </div>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center space-x-2">
+                                    <h3 class="font-semibold text-gray-900 dark:text-white truncate">Anh Nguyễn</h3>
+                                    <div class="flex items-center space-x-1">
+                                        <span class="text-yellow-500">⚡</span>
+                                        <span class="text-xs font-bold text-yellow-600 dark:text-yellow-400">3</span>
+                                    </div>
+                                </div>
+                                <p class="text-sm text-gray-600 dark:text-gray-400 truncate">Hẹn gặp lại sau nhé!</p>
+                                <span class="text-xs text-gray-500 dark:text-gray-500">Hôm qua</span>
+                            </div>
+                            <div class="w-2 h-2 bg-purple-500 rounded-full"></div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors">
+                        <div class="flex items-center space-x-3">
+                            <div class="relative">
+                                <div class="w-12 h-12 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full flex items-center justify-center">
+                                    <span class="text-white font-bold">MT</span>
+                                </div>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center space-x-2">
+                                    <h3 class="font-semibold text-gray-900 dark:text-white truncate">Mai Thảo</h3>
+                                    <div class="flex items-center space-x-1">
+                                        <span class="text-yellow-500">⚡</span>
+                                        <span class="text-xs font-bold text-yellow-600 dark:text-yellow-400">12</span>
+                                    </div>
+                                </div>
+                                <p class="text-sm text-gray-600 dark:text-gray-400 truncate">Cảm ơn bạn nhiều!</p>
+                                <span class="text-xs text-gray-500 dark:text-gray-500">2 ngày trước</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors">
+                        <div class="flex items-center space-x-3">
+                            <div class="relative">
+                                <div class="w-12 h-12 bg-gradient-to-r from-red-500 to-pink-500 rounded-full flex items-center justify-center">
+                                    <span class="text-white font-bold">HL</span>
+                                </div>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center space-x-2">
+                                    <h3 class="font-semibold text-gray-900 dark:text-white truncate">Hoàng Long</h3>
+                                    <div class="flex items-center space-x-1">
+                                        <span class="text-yellow-500">⚡</span>
+                                        <span class="text-xs font-bold text-yellow-600 dark:text-yellow-400">1</span>
+                                    </div>
+                                </div>
+                                <p class="text-sm text-gray-600 dark:text-gray-400 truncate">Được rồi, tôi sẽ gửi file cho bạn</p>
+                                <span class="text-xs text-gray-500 dark:text-gray-500">1 tuần trước</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
+
+            <!-- Quick Actions -->
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+                <div class="space-y-3">
+                    <button id="addFriendBtn"
+                            class="w-full p-3 rounded-xl bg-gradient-to-r from-green-500 to-teal-500 text-white font-semibold shadow hover:opacity-90 transition">
+                        ➕ Thêm bạn
+                    </button>
+                    <button id="createGroupBtn"
+                            class="w-full p-3 rounded-xl bg-gradient-to-r from-pink-500 to-red-500 text-white font-semibold shadow hover:opacity-90 transition">
+                        👥 Tạo nhóm
+                    </button>
+                </div>
+            </div>
+
+            <!-- User Profile Section -->
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+                <div class="flex items-center space-x-3">
+                    <div class="relative">
+                        <div class="w-12 h-12 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
+                            <span class="text-white font-bold text-lg">👤</span>
+                        </div>
+                        <div id="profileDot" class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-900"></div>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 id="profileName" class="font-semibold text-gray-900 dark:text-white truncate">Bạn</h3>
+                        <p id="profileStatus" class="text-sm text-gray-500 dark:text-gray-400">Đang hoạt động</p>
+                    </div>
+                    <button id="logoutButton" class="p-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors duration-100 shadow-sm">
+                        Đăng xuất
+                    </button>
+                    <button id="editProfileBtn" class="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                        <svg class="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div id="mainChatArea" class="flex-1 flex flex-col transition-all duration-300">
+            <!-- Header -->
+            <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-6 flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <div class="relative">
+                        <div class="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-700 rounded-full flex items-center justify-center">
+                            <span class="text-white font-bold text-lg">💬</span>
+                        </div>
+                        <div id="appStatusDot" class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-800"></div>
+                    </div>
+                    <div>
+                        <h1 id="chatTitle" class="text-xl font-bold text-gray-900 dark:text-white">WebChat Pro</h1>
+                        <p id="appStatusText" class="text-sm text-gray-500 dark:text-gray-400">Đang hoạt động</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-3">
+                    <!-- Theme Toggle (Sáng/Tối toàn app) -->
+                    <button id="themeToggle"
+                            class="p-3 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200 shadow-sm">
+                        <span id="lightIcon" class="text-gray-700 text-lg">🌙</span>
+                        <span id="darkIcon" class="text-yellow-400 text-lg hidden">☀️</span>
+                    </button>
+
+                    <!-- Settings -->
+                    <button id="chatSettingsBtn"
+                            class="p-3 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200 shadow-sm">
+                        <span class="text-gray-700 dark:text-gray-300">⚙️</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chat Messages -->
+            <div id="chatMessages" class="flex-1 overflow-y-auto p-6 space-y-4 scroll-smooth bg-white dark:bg-gray-800">
+                <!-- Welcome Message -->
+                <div class="flex justify-center">
+                    <div class="glass-effect px-6 py-3 rounded-full text-sm text-gray-600 dark:text-gray-300">
+                        Chào mừng bạn đến với WebChat Pro! 🎉
+                    </div>
+                </div>
+
+                <!-- Sample Messages -->
+                <div class="flex items-start space-x-3 message-bubble">
+                    <div class="w-8 h-8 bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span class="text-white text-sm">👤</span>
+                    </div>
+                    <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md">
+                        <p class="text-gray-800 dark:text-gray-200">Xin chào! Giao diện này trông thật tuyệt vời! 😍</p>
+                        <span class="text-xs text-gray-500 dark:text-gray-400 mt-1 block">14:30</span>
+                    </div>
+                </div>
+
+                <div class="flex items-start space-x-3 justify-end message-bubble">
+                    <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md">
+                        <p class="text-white">Cảm ơn bạn! Tôi đã thiết kế với nhiều tính năng hiện đại và chế độ sáng/tối 🌓</p>
+                        <span class="text-xs text-purple-100 mt-1 block">14:32</span>
+                    </div>
+                    <div class="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span class="text-white text-sm">🤖</span>
+                    </div>
+                </div>
+
+                <div class="flex items-start space-x-3 message-bubble">
+                    <div class="w-8 h-8 bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span class="text-white text-sm">👤</span>
+                    </div>
+                    <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md">
+                        <p class="text-gray-800 dark:text-gray-200">Hiệu ứng bo góc và màu sắc rất chuyên nghiệp! 👏</p>
+                        <span class="text-xs text-gray-500 dark:text-gray-400 mt-1 block">14:35</span>
+                    </div>
+                </div>
+
+                <!-- Typing Indicator -->
+                <div id="typingIndicator" class="flex items-start space-x-3 typing-indicator hidden">
+                    <div class="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span class="text-white text-sm">🤖</span>
+                    </div>
+                    <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3">
+                        <div class="flex space-x-1">
+                            <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                            <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                            <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Message Input -->
+            <div class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-6">
+                <div class="flex items-center space-x-4">
+                    <button class="p-3 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200">📎</button>
+
+                    <div class="flex-1 relative">
+                        <input type="text" id="messageInput" placeholder="Nhập tin nhắn của bạn..."
+                               class="w-full px-6 py-4 bg-gray-100 dark:bg-gray-700 rounded-full border-none focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-400 transition-all duration-200" />
+
+                        <!-- Emoji toggle button -->
+                        <button id="emojiToggleBtn"
+                                class="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors duration-200"
+                                aria-expanded="false" aria-haspopup="true" title="Chèn biểu tượng cảm xúc">
+                            😊
+                        </button>
+
+                        <!-- Emoji Picker Popover -->
+                        <div id="emojiPicker"
+                             class="emoji-picker absolute right-0 bottom-16 w-80 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl p-3 hidden z-50">
+                            <!-- Tabs -->
+                            <div class="flex gap-2 mb-3 ">
+                                <button class="emoji-tab" data-cat="recent" aria-selected="true">Thường dùng</button>
+                                <button class="emoji-tab" data-cat="camxuc" aria-selected="false">Cảm xúc</button>
+                                <button class="emoji-tab" data-cat="cucchi" aria-selected="false">Cử chỉ</button>
+                                <button class="emoji-tab" data-cat="dongvat" aria-selected="false">Động vật</button>
+                                <button class="emoji-tab" data-cat="doan" aria-selected="false">Đồ ăn</button>
+                                <button class="emoji-tab" data-cat="hoatdong" aria-selected="false">Hoạt động</button>
+                            </div>
+                            <!-- Grid -->
+                            <div id="emojiGrid" class="grid grid-cols-8 gap-2"></div>
+                        </div>
+                    </div>
+
+                    <button id="sendButton" class="p-4 bg-gradient-to-r from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 rounded-full text-white transition-all duration-200 transform hover:scale-105 shadow-lg">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+<!-- Add Friend Modal -->
+<div id="addFriendModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-96">
+        <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Thêm bạn mới</h2>
+        <input id="friendInput" type="text" placeholder="Nhập User ID hoặc số điện thoại"
+               class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 mb-4" />
+        <div class="flex justify-end space-x-2">
+            <button onclick="closeModal('addFriendModal')"
+                    class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">Hủy</button>
+            <button id="confirmAddFriend"
+                    class="px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-teal-500 text-white">Thêm</button>
+        </div>
+    </div>
+</div>
+
+<!-- Create Group Modal -->
+<div id="createGroupModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-96">
+        <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Tạo nhóm mới</h2>
+        <input id="groupName" type="text" placeholder="Tên nhóm"
+               class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 mb-3" />
+        <input id="groupMembers" type="text" placeholder="Nhập User ID/SĐT (cách nhau bởi dấu ,)"
+               class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 mb-4" />
+        <div class="flex justify-end space-x-2">
+            <button onclick="closeModal('createGroupModal')"
+                    class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">Hủy</button>
+            <button id="confirmCreateGroup"
+                    class="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 to-red-500 text-white">Tạo</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Profile Modal -->
+<div id="editProfileModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-96">
+        <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Chỉnh sửa hồ sơ</h2>
+
+        <label class="block text-sm text-gray-600 dark:text-gray-300 mb-1">Tên hiển thị</label>
+        <input id="editName" type="text" placeholder="Nhập tên hiển thị"
+               class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 mb-3" />
+
+        <label class="block text-sm text-gray-600 dark:text-gray-300 mb-1">Trạng thái</label>
+        <select id="editStatus"
+                class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 mb-4">
+            <option value="active">Đang hoạt động</option>
+            <option value="busy">Đang bận</option>
+            <option value="offline">Tắt trạng thái hoạt động</option>
+        </select>
+
+        <label class="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 mb-4">
+            <input id="editPersist" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+            <span>Lưu vào trình duyệt (LocalStorage)</span>
+        </label>
+
+        <div class="flex justify-end space-x-2">
+            <button onclick="closeModal('editProfileModal')"
+                    class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">Hủy</button>
+            <button id="saveProfileChanges"
+                    class="px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white">Lưu</button>
+        </div>
+    </div>
+</div>
+
+<!-- Chat Settings Drawer -->
+<div id="chatSettingsPanel"
+     class="fixed top-0 right-0 h-full w-80 max-w-[90vw] bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-2xl
+            transform translate-x-full transition-transform duration-300 z-40">
+
+    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+        <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Cài đặt đoạn chat</h3>
+        <button id="closeChatSettings" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+            ✖
+        </button>
+    </div>
+
+    <div class="p-5 space-y-6 text-sm">
+        <!-- Hình nền đoạn chat -->
+        <div>
+            <div class="font-medium text-gray-800 dark:text-gray-200 mb-2">Hình nền đoạn chat</div>
+            <div id="wpPresets" class="grid grid-cols-3 gap-3">
+                <!-- Mặc định -->
+                <button class="wp-item" data-wp="none" aria-pressed="true" style="background: linear-gradient(135deg,#f9fafb,#e5e7eb);">
+                    <span class="wp-label">Mặc định</span>
+                </button>
+                <!-- Tím gradient -->
+                <button class="wp-item" data-wp="grad-purple" style="background: linear-gradient(135deg,#f5e1ff,#e7d4ff);">
+                    <span class="wp-label">Tím</span>
+                </button>
+                <!-- Xanh gradient -->
+                <button class="wp-item" data-wp="grad-blue" style="background: linear-gradient(135deg,#dbeafe,#bfdbfe);">
+                    <span class="wp-label">Xanh</span>
+                </button>
+                <!-- Hồng gradient -->
+                <button class="wp-item" data-wp="grad-pink" style="background: linear-gradient(135deg,#ffe4e6,#fecdd3);">
+                    <span class="wp-label">Hồng</span>
+                </button>
+                <!-- Chấm bi sáng -->
+                <button class="wp-item" data-wp="dots" style="background:
+          radial-gradient(#e5e7eb 1.2px, transparent 1.2px),
+          radial-gradient(#e5e7eb 1.2px, transparent 1.2px);
+          background-size:20px 20px,20px 20px; background-position:0 0,10px 10px; background-color:#ffffff;">
+                    <span class="wp-label">Chấm bi</span>
+                </button>
+                <!-- Lưới nhạt -->
+                <button class="wp-item" data-wp="grid" style="background:
+          linear-gradient(rgba(0,0,0,.06) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0,0,0,.06) 1px, transparent 1px);
+          background-size:24px 24px,24px 24px; background-color:#ffffff;">
+                    <span class="wp-label">Lưới</span>
+                </button>
+            </div>
+
+            <div class="mt-3 flex items-center gap-2">
+                <input id="wpUrl" type="text" placeholder="Dán URL ảnh (jpg/png/webp)..."
+                       class="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+                <button id="applyWpUrl" class="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white">Áp dụng</button>
+            </div>
+            <div class="mt-2 flex items-center gap-2">
+                <button id="resetWp" class="px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200">Xóa hình nền</button>
+                <span class="text-xs text-gray-500 dark:text-gray-400">Áp dụng trực tiếp cho vùng tin nhắn.</span>
+            </div>
+        </div>
+
+        <!-- Biểu tượng cảm xúc -->
+        <div>
+            <div class="font-medium text-gray-800 dark:text-gray-200 mb-2">Biểu tượng cảm xúc</div>
+            <label class="inline-flex items-center gap-2">
+                <input type="checkbox" id="bigEmojiToggle" class="accent-purple-600">
+                <span class="text-gray-700 dark:text-gray-300">Hiển thị emoji lớn</span>
+            </label>
+        </div>
+
+        <!-- Biệt danh -->
+        <div>
+            <div class="font-medium text-gray-800 dark:text-gray-200 mb-2">Biệt danh đoạn chat</div>
+            <div class="flex items-center gap-2">
+                <input id="chatNicknameInput" type="text" placeholder="Nhập biệt danh…"
+                       class="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+                <button id="applyNickname" class="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white">Lưu</button>
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Sẽ thay đổi tiêu đề đoạn chat ở thanh trên.</p>
+        </div>
+
+        <!-- Chặn -->
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="font-medium text-gray-800 dark:text-gray-200">Chặn</div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Không thể gửi/nhận tin nhắn.</p>
+            </div>
+            <label class="inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="blockToggle" class="sr-only peer">
+                <span class="w-10 h-6 bg-gray-300 peer-checked:bg-red-500 rounded-full relative after:content-[''] after:absolute after:w-5 after:h-5 after:bg-white after:rounded-full after:top-0.5 after:left-0.5 after:transition-all peer-checked:after:translate-x-4"></span>
+            </label>
+        </div>
+
+        <!-- Tắt thông báo -->
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="font-medium text-gray-800 dark:text-gray-200">Tắt thông báo</div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Không hiện cảnh báo mới.</p>
+            </div>
+            <label class="inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="muteToggle" class="sr-only peer">
+                <span class="w-10 h-6 bg-gray-300 peer-checked:bg-gray-600 rounded-full relative after:content-[''] after:absolute after:w-5 after:h-5 after:bg-white after:rounded-full after:top-0.5 after:left-0.5 after:transition-all peer-checked:after:translate-x-4"></span>
+            </label>
+        </div>
+
+        <!-- Xóa đoạn chat -->
+        <div>
+            <button id="clearChatBtn"
+                    class="w-full py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium">
+                Xóa đoạn chat
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Overlay khi mở settings -->
+<div id="chatSettingsOverlay" class="fixed inset-0 bg-black/40 hidden z-30"></div>
+
 <script>
-    // Wallpaper
-    const wallpapers = [
-        "https://images.unsplash.com/photo-1502082553048-f009c37129b9?q=80&w=1600&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1600&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1469474968028-56623f02e42e?q=80&w=1600&auto=format&fit=crop"
-    ];
-    let wallIndex = 0;
-    const wallEl = document.getElementById("wallpaper");
-    function setWallpaper(i){ wallIndex = (i + wallpapers.length) % wallpapers.length; wallEl.style.backgroundImage = "url('" + wallpapers[wallIndex] + "')"; }
-    setWallpaper(0);
+    // Theme Toggle (Sáng/Tối toàn app)
+    const themeToggle = document.getElementById("themeToggle");
+    const lightIcon = document.getElementById("lightIcon");
+    const darkIcon = document.getElementById("darkIcon");
+    const html = document.documentElement;
 
-    // Chat helpers
-    const msgList = document.getElementById("messages");
-    const input   = document.getElementById("input");
-    const sendBtn = document.getElementById("send");
-    const attach  = document.getElementById("attach");
-    const file    = document.getElementById("file");
-    const displayName = document.getElementById("displayName");
+    const currentTheme = localStorage.getItem("theme") || "light";
+    if (currentTheme === "dark") { html.classList.add("dark"); } else { html.classList.remove("dark"); }
 
-    function timeNow(){ const d = new Date(); return d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}); }
-    function makeBubble(type, html){ return `<div class="row ${type}"><div class="bubble">${html}</div></div>`; }
-    function renderIncoming(msg, myname){
-        const mine = (msg.from || "") === myname;
-        let html = (msg.content || "").replace(/</g, "&lt;");
-        html += `<div class="stamp">${
-            new Date(msg.timestamp || Date.now()).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})
-        }${mine ? " • ✓✓" : ""}</div>`;
-        msgList.insertAdjacentHTML("beforeend", makeBubble(mine ? "me" : "you", html));
-        msgList.parentElement.scrollTop = msgList.parentElement.scrollHeight;
+    function updateThemeIcons() {
+        const chatContainer = document.querySelector(".chat-container");
+        if (html.classList.contains("dark")) {
+            lightIcon.classList.add("hidden");
+            darkIcon.classList.remove("hidden");
+            chatContainer.style.background = "linear-gradient(135deg, #2d1b4e 0%, #1a102b 100%)";
+        } else {
+            lightIcon.classList.remove("hidden");
+            darkIcon.classList.add("hidden");
+            chatContainer.style.background = "linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%)";
+        }
+    }
+    updateThemeIcons();
+
+    themeToggle?.addEventListener("click", () => {
+        html.classList.toggle("dark");
+        const newTheme = html.classList.contains("dark") ? "dark" : "light";
+        localStorage.setItem("theme", newTheme);
+        updateThemeIcons();
+    });
+
+    // Message Functionality
+    const messageInput = document.getElementById("messageInput");
+    const sendButton = document.getElementById("sendButton");
+    const chatMessages = document.getElementById("chatMessages");
+    const typingIndicator = document.getElementById("typingIndicator");
+
+    function addMessage(text, isUser = true) {
+        const messageDiv = document.createElement("div");
+        messageDiv.className = `flex items-start space-x-3 message-bubble ${isUser ? "justify-end" : ""}`;
+
+        const time = new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+
+        if (isUser) {
+            messageDiv.innerHTML = `
+                <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md">
+                    <p class="text-white">${text}</p>
+                    <span class="text-xs text-purple-100 mt-1 block">${time}</span>
+                </div>
+                <div class="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span class="text-white text-sm">👤</span>
+                </div>`;
+        } else {
+            messageDiv.innerHTML = `
+                <div class="w-8 h-8 bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span class="text-white text-sm">🤖</span>
+                </div>
+                <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md">
+                    <p class="text-gray-800 dark:text-gray-200">${text}</p>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 mt-1 block">${time}</span>
+                </div>`;
+        }
+
+        chatMessages.insertBefore(messageDiv, typingIndicator);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    // ---- Nếu bạn đã bật Spring WebSocket, tự kết nối STOMP khi tải trang ----
-    let stomp = null;
-    (function connectWs(){
-        try{
-            const sock = new SockJS("/ws");
-            stomp = Stomp.over(sock);
-            stomp.debug = null;
-            stomp.connect({}, () => {
-                stomp.subscribe("/topic/public", frame => {
-                    const msg = JSON.parse(frame.body);
-                    renderIncoming(msg, displayName.value.trim());
-                });
-            });
-        }catch(e){ console.warn("Không kết nối được WebSocket (demo offline).", e); }
+    function showTyping() { typingIndicator.classList.remove("hidden"); chatMessages.scrollTop = chatMessages.scrollHeight; }
+    function hideTyping() { typingIndicator.classList.add("hidden"); }
+
+    function sendMessage() {
+        const text = messageInput.value.trim();
+        if (!text) return;
+        addMessage(text, true);
+        messageInput.value = "";
+
+        showTyping();
+        setTimeout(() => {
+            hideTyping();
+            const responses = [
+                "Cảm ơn bạn đã sử dụng WebChat Pro! 😊",
+                "Tin nhắn của bạn đã được nhận. Giao diện này có thiết kế responsive tuyệt vời! 🎨",
+                "Tôi thích cách bạn tương tác với giao diện này! ✨",
+                "WebChat Pro hỗ trợ chế độ sáng/tối và nhiều tính năng hiện đại! 🌟",
+                "Hiệu ứng bo góc và màu sắc gradient thật chuyên nghiệp! 🎯",
+            ];
+            const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+            addMessage(randomResponse, false);
+        }, 1500);
+    }
+
+    sendButton.addEventListener("click", sendMessage);
+    messageInput.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
+    messageInput.focus();
+
+    /* -------------------------
+       Modals helpers
+    ------------------------- */
+    function openModal(id) { document.getElementById(id).classList.remove("hidden"); }
+    function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
+
+    document.getElementById("addFriendBtn").addEventListener("click", () => openModal("addFriendModal"));
+    document.getElementById("createGroupBtn").addEventListener("click", () => openModal("createGroupModal"));
+
+    function timeNowLabel() {
+        const d = new Date();
+        return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+    }
+
+    function getInitials(name) {
+        if (!name) return "UU";
+        const parts = name.trim().split(/\s+/).filter(Boolean);
+        if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+
+    const gradients = [
+        "from-green-500 to-teal-500",
+        "from-blue-500 to-indigo-500",
+        "from-red-500 to-pink-500",
+        "from-purple-500 to-pink-500",
+        "from-emerald-500 to-cyan-500",
+        "from-amber-500 to-orange-600"
+    ];
+    function pickGradient(seed = 0) { return gradients[seed % gradients.length]; }
+
+    function createChatItem({ name, preview = "Tin nhắn mới", unread = true, power = 1, gradientSeed = 0 }) {
+        const initials = getInitials(name);
+        const gradient = pickGradient(gradientSeed);
+        const wrapper = document.createElement("div");
+        wrapper.className = "p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors";
+        wrapper.innerHTML = `
+            <div class="flex items-center space-x-3">
+                <div class="relative">
+                    <div class="w-12 h-12 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center">
+                        <span class="text-white font-bold">${initials}</span>
+                    </div>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center space-x-2">
+                        <h3 class="font-semibold text-gray-900 dark:text-white truncate">${name}</h3>
+                        <div class="flex items-center space-x-1">
+                            <span class="text-yellow-500">⚡</span>
+                            <span class="text-xs font-bold text-yellow-600 dark:text-yellow-400">${power}</span>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 truncate">${preview}</p>
+                    <span class="text-xs text-gray-500 dark:text-gray-500">${timeNowLabel()}</span>
+                </div>
+                ${unread ? '<div class="w-2 h-2 bg-purple-500 rounded-full"></div>' : ''}
+            </div>
+        `;
+        return wrapper;
+    }
+
+    const chatList = document.getElementById("chatList");
+
+    // Confirm Add Friend
+    document.getElementById("confirmAddFriend").addEventListener("click", () => {
+        const value = document.getElementById("friendInput").value.trim();
+        if (!value) return;
+        const name = `Người dùng ${value}`;
+        const node = createChatItem({
+            name,
+            preview: "Vừa được thêm vào danh bạ",
+            unread: true,
+            power: 1,
+            gradientSeed: value.length
+        });
+        chatList.prepend(node);
+        closeModal("addFriendModal");
+        document.getElementById("friendInput").value = "";
+    });
+
+    // Confirm Create Group
+    document.getElementById("confirmCreateGroup").addEventListener("click", () => {
+        const name = document.getElementById("groupName").value.trim();
+        const members = document.getElementById("groupMembers").value.trim();
+        if (!name || !members) return;
+
+        const membersArr = members.split(",").map(s => s.trim()).filter(Boolean);
+        const preview = `Thành viên: ${membersArr.slice(0, 3).join(", ")}${membersArr.length > 3 ? "..." : ""}`;
+
+        const node = createChatItem({
+            name,
+            preview,
+            unread: true,
+            power: Math.max(1, Math.min(12, membersArr.length)),
+            gradientSeed: name.length + membersArr.length
+        });
+        chatList.prepend(node);
+
+        closeModal("createGroupModal");
+        document.getElementById("groupName").value = "";
+        document.getElementById("groupMembers").value = "";
+    });
+
+    // ===== Edit Profile (status select + dot) =====
+    const profileNameEl   = document.getElementById("profileName");
+    const profileStatusEl = document.getElementById("profileStatus");
+    const editProfileBtn  = document.getElementById("editProfileBtn");
+    const editNameInput   = document.getElementById("editName");
+    const editStatusSelect= document.getElementById("editStatus");
+    const editPersistChk  = document.getElementById("editPersist");
+
+    // Header status UI
+    const appStatusText = document.getElementById("appStatusText");
+    const appStatusDot  = document.getElementById("appStatusDot");
+    const profileDot    = document.getElementById("profileDot");
+
+    const STATUS_MAP = {
+        active:  { label: "Đang hoạt động", colorClass: "bg-green-500"  },
+        busy:    { label: "Đang bận",       colorClass: "bg-yellow-500" },
+        offline: { label: "Tắt trạng thái hoạt động", colorClass: "bg-red-500" }
+    };
+    const STATUS_KEYS = Object.keys(STATUS_MAP);
+    const ALL_DOT_CLASSES = ["bg-green-500", "bg-yellow-500", "bg-red-500"];
+
+    function labelToKey(label = "") {
+        label = (label || "").toLowerCase().trim();
+        if (label.includes("bận")) return "busy";
+        if (label.includes("tắt")) return "offline";
+        return "active";
+    }
+
+    function updateDotsColor(dotEl, key) {
+        if (!dotEl) return;
+        dotEl.classList.remove(...ALL_DOT_CLASSES);
+        dotEl.classList.add(STATUS_MAP[key].colorClass);
+    }
+
+    function updateStatusUI(key) {
+        const { label } = STATUS_MAP[key] || STATUS_MAP.active;
+        profileStatusEl.textContent = label;
+        if (appStatusText) appStatusText.textContent = label;
+        updateDotsColor(profileDot, key);
+        updateDotsColor(appStatusDot, key);
+    }
+
+    // Init from LocalStorage on load
+    (function initProfileFromStorage(){
+        const nameFromLS   = localStorage.getItem("profileName");
+        const statusKeyLS  = localStorage.getItem("profileStatusKey");
+        const statusTextLS = localStorage.getItem("profileStatus"); // backward compatible
+
+        if (nameFromLS)   profileNameEl.textContent   = nameFromLS;
+
+        let initKey = "active";
+        if (statusKeyLS && STATUS_MAP[statusKeyLS]) {
+            initKey = statusKeyLS;
+        } else if (statusTextLS) {
+            initKey = labelToKey(statusTextLS);
+        }
+        updateStatusUI(initKey);
+        editStatusSelect.value = initKey;
     })();
 
-    function sendMessage(){
-        const name = displayName.value.trim() || "Người dùng";
-        const text = input.value.trim();
-        if (!text) return;
-        if (stomp && stomp.connected) {
-            const msg = { from: name, content: text, timestamp: Date.now() };
-            stomp.send("/app/chat.send", {}, JSON.stringify(msg));
-        } else {
-            // demo offline
-            renderIncoming({from:name, content:text, timestamp:Date.now()}, name);
-        }
-        input.value = "";
-    }
-    input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); sendMessage(); } });
-    sendBtn.onclick = sendMessage;
+    // Open modal and prefill
+    editProfileBtn.addEventListener("click", () => {
+        const currentName   = localStorage.getItem("profileName") || profileNameEl.textContent.trim() || "Bạn";
+        const currentKey    = localStorage.getItem("profileStatusKey") || labelToKey(profileStatusEl.textContent.trim());
+        editNameInput.value   = currentName;
+        editStatusSelect.value = STATUS_KEYS.includes(currentKey) ? currentKey : "active";
+        editPersistChk.checked = Boolean(localStorage.getItem("profileName") || localStorage.getItem("profileStatusKey") || localStorage.getItem("profileStatus"));
+        openModal("editProfileModal");
+    });
 
-    // Image attach (demo: gửi base64 hoặc tự xử lý upload server)
-    attach.onclick = () => file.click();
-    file.addEventListener("change", (e)=>{
-        const f = e.target.files[0]; if(!f) return;
-        const reader = new FileReader();
-        reader.onload = ev => {
-            const name = displayName.value.trim() || "Người dùng";
-            const content = "[ẢNH] " + ev.target.result.substring(0, 60) + "...";
-            if (stomp && stomp.connected) {
-                stomp.send("/app/chat.send", {}, JSON.stringify({from:name, content, timestamp:Date.now()}));
-            } else {
-                renderIncoming({from:name, content, timestamp:Date.now()}, name);
-            }
-        };
-        reader.readAsDataURL(f); e.target.value = "";
+    // Save changes profile
+    document.getElementById("saveProfileChanges").addEventListener("click", () => {
+        const newName   = editNameInput.value.trim() || "Bạn";
+        const key       = editStatusSelect.value;
+        const safeKey   = STATUS_KEYS.includes(key) ? key : "active";
+
+        profileNameEl.textContent = newName;
+        updateStatusUI(safeKey);
+
+        if (editPersistChk.checked){
+            localStorage.setItem("profileName", newName);
+            localStorage.setItem("profileStatusKey", safeKey);
+            localStorage.setItem("profileStatus", STATUS_MAP[safeKey].label);
+        } else {
+            localStorage.removeItem("profileName");
+            localStorage.removeItem("profileStatusKey");
+            localStorage.removeItem("profileStatus");
+        }
+        closeModal("editProfileModal");
+    });
+
+    // ===== Chat Settings Drawer =====
+    const chatSettingsBtn   = document.getElementById('chatSettingsBtn');
+    const chatSettingsPanel = document.getElementById('chatSettingsPanel');
+    const chatSettingsOverlay = document.getElementById('chatSettingsOverlay');
+    const closeChatSettings = document.getElementById('closeChatSettings');
+    const mainChatArea      = document.getElementById('mainChatArea');
+
+    function openChatSettings() {
+        chatSettingsPanel.classList.remove('translate-x-full');
+        chatSettingsOverlay.classList.remove('hidden');
+        mainChatArea.classList.add('mr-80'); // đẩy khung chat vào giữa
+    }
+    function closeChatSettingsPanel() {
+        chatSettingsPanel.classList.add('translate-x-full');
+        chatSettingsOverlay.classList.add('hidden');
+        mainChatArea.classList.remove('mr-80');
+    }
+
+    chatSettingsBtn?.addEventListener('click', openChatSettings);
+    closeChatSettings?.addEventListener('click', closeChatSettingsPanel);
+    chatSettingsOverlay?.addEventListener('click', closeChatSettingsPanel);
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeChatSettingsPanel(); });
+
+    // ===== Hình nền đoạn chat (Wallpaper) =====
+    const wpPresetsEl = document.getElementById('wpPresets');
+    const wpUrlInput = document.getElementById('wpUrl');
+    const applyWpUrlBtn = document.getElementById('applyWpUrl');
+    const resetWpBtn = document.getElementById('resetWp');
+
+    const WP_PRESETS = {
+        none:      { type: 'preset', key: 'none' },
+        'grad-purple': { type: 'preset', key: 'grad-purple' },
+        'grad-blue':   { type: 'preset', key: 'grad-blue' },
+        'grad-pink':   { type: 'preset', key: 'grad-pink' },
+        dots:      { type: 'preset', key: 'dots' },
+        grid:      { type: 'preset', key: 'grid' },
+    };
+
+    function applyWallpaperStyle(presetOrObj) {
+        // reset common props
+        chatMessages.style.backgroundImage = 'none';
+        chatMessages.style.backgroundSize = '';
+        chatMessages.style.backgroundPosition = '';
+        chatMessages.style.backgroundAttachment = '';
+        chatMessages.style.backgroundColor = '';
+
+        if (!presetOrObj) return;
+
+        if (presetOrObj.type === 'url') {
+            chatMessages.style.backgroundImage = `url("${presetOrObj.url}")`;
+            chatMessages.style.backgroundSize = 'cover';
+            chatMessages.style.backgroundPosition = 'center';
+            chatMessages.style.backgroundAttachment = 'fixed';
+            return;
+        }
+
+        // preset
+        switch (presetOrObj.key) {
+            case 'grad-purple':
+                chatMessages.style.backgroundImage = 'linear-gradient(135deg,#f5e1ff,#e7d4ff)';
+                break;
+            case 'grad-blue':
+                chatMessages.style.backgroundImage = 'linear-gradient(135deg,#dbeafe,#bfdbfe)';
+                break;
+            case 'grad-pink':
+                chatMessages.style.backgroundImage = 'linear-gradient(135deg,#ffe4e6,#fecdd3)';
+                break;
+            case 'dots':
+                chatMessages.style.backgroundImage =
+                    'radial-gradient(#e5e7eb 1.2px, transparent 1.2px), radial-gradient(#e5e7eb 1.2px, transparent 1.2px)';
+                chatMessages.style.backgroundSize = '20px 20px,20px 20px';
+                chatMessages.style.backgroundPosition = '0 0,10px 10px';
+                chatMessages.style.backgroundColor = '#ffffff';
+                break;
+            case 'grid':
+                chatMessages.style.backgroundImage =
+                    'linear-gradient(rgba(0,0,0,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.06) 1px, transparent 1px)';
+                chatMessages.style.backgroundSize = '24px 24px,24px 24px';
+                chatMessages.style.backgroundColor = '#ffffff';
+                break;
+            case 'none':
+            default:
+                // để nguyên nền mặc định (bg-white/dark:bg-gray-800)
+                break;
+        }
+    }
+
+    function setActivePresetButton(key) {
+        document.querySelectorAll('#wpPresets .wp-item').forEach(btn => {
+            btn.setAttribute('aria-pressed', btn.dataset.wp === key ? 'true' : 'false');
+        });
+    }
+
+    function saveWallpaper(data) {
+        localStorage.setItem('chatWallpaper', JSON.stringify(data));
+    }
+
+    function loadWallpaper() {
+        try {
+            const data = JSON.parse(localStorage.getItem('chatWallpaper') || 'null');
+            return data;
+        } catch(e) {
+            return null;
+        }
+    }
+
+    // Init wallpaper from LS
+    (function initWallpaper(){
+        const saved = loadWallpaper();
+        if (saved) {
+            applyWallpaperStyle(saved);
+            if (saved.type === 'preset') setActivePresetButton(saved.key);
+            else setActivePresetButton(''); // custom url, không chọn preset
+        } else {
+            setActivePresetButton('none');
+        }
+    })();
+
+    // Click các preset
+    wpPresetsEl?.addEventListener('click', (e) => {
+        const target = e.target.closest('.wp-item');
+        if (!target) return;
+        const key = target.dataset.wp;
+        const data = WP_PRESETS[key] || WP_PRESETS.none;
+        applyWallpaperStyle(data);
+        setActivePresetButton(key);
+        saveWallpaper(data);
+    });
+
+    // Áp dụng URL ảnh
+    applyWpUrlBtn?.addEventListener('click', () => {
+        const url = (wpUrlInput.value || '').trim();
+        if (!url) return;
+        const data = { type: 'url', url };
+        applyWallpaperStyle(data);
+        setActivePresetButton(''); // none active
+        saveWallpaper(data);
+    });
+
+    // Reset hình nền
+    resetWpBtn?.addEventListener('click', () => {
+        const data = WP_PRESETS.none;
+        applyWallpaperStyle(data);
+        setActivePresetButton('none');
+        saveWallpaper(data);
+        wpUrlInput.value = '';
+    });
+
+    // ===== Biểu tượng cảm xúc lớn =====
+    const bigEmojiToggle = document.getElementById('bigEmojiToggle');
+    (function initBigEmoji() {
+        const v = localStorage.getItem('bigEmoji') === '1';
+        bigEmojiToggle.checked = v;
+        document.body.classList.toggle('big-emoji', v);
+    })();
+    bigEmojiToggle?.addEventListener('change', (e) => {
+        const v = e.target.checked;
+        localStorage.setItem('bigEmoji', v ? '1' : '0');
+        document.body.classList.toggle('big-emoji', v);
+    });
+
+    // ===== Biệt danh =====
+    const chatTitle = document.getElementById('chatTitle');
+    const chatNicknameInput = document.getElementById('chatNicknameInput');
+    const applyNickname = document.getElementById('applyNickname');
+
+    (function initNickname() {
+        const nick = localStorage.getItem('chatNickname');
+        if (nick) {
+            chatTitle.textContent = nick;
+            chatNicknameInput.value = nick;
+        }
+    })();
+
+    applyNickname?.addEventListener('click', () => {
+        const nick = chatNicknameInput.value.trim();
+        if (nick) {
+            chatTitle.textContent = nick;
+            localStorage.setItem('chatNickname', nick);
+        } else {
+            chatTitle.textContent = 'WebChat Pro';
+            localStorage.removeItem('chatNickname');
+        }
+    });
+
+    // ===== Chặn =====
+    const blockToggle = document.getElementById('blockToggle');
+    function applyBlockState(v) {
+        messageInput.disabled = v;
+        sendButton.disabled = v;
+        messageInput.classList.toggle('opacity-60', v);
+        sendButton.classList.toggle('opacity-60', v);
+        messageInput.classList.toggle('cursor-not-allowed', v);
+        sendButton.classList.toggle('cursor-not-allowed', v);
+    }
+    (function initBlock() {
+        const blocked = localStorage.getItem('chatBlocked') === '1';
+        blockToggle.checked = blocked;
+        applyBlockState(blocked);
+    })();
+    blockToggle?.addEventListener('change', (e) => {
+        const v = e.target.checked;
+        localStorage.setItem('chatBlocked', v ? '1' : '0');
+        applyBlockState(v);
+    });
+
+    // ===== Tắt thông báo =====
+    const muteToggle = document.getElementById('muteToggle');
+    (function initMute() {
+        const muted = localStorage.getItem('chatMuted') === '1';
+        muteToggle.checked = muted;
+    })();
+    muteToggle?.addEventListener('change', (e) => {
+        const v = e.target.checked;
+        localStorage.setItem('chatMuted', v ? '1' : '0');
+    });
+
+    // ===== Xóa đoạn chat =====
+    const clearChatBtn = document.getElementById('clearChatBtn');
+    clearChatBtn?.addEventListener('click', () => {
+        Array.from(chatMessages.children).forEach(node => {
+            if (node !== typingIndicator) node.remove();
+        });
+        const info = document.createElement('div');
+        info.className = 'flex justify-center';
+        info.innerHTML = '<div class="glass-effect px-6 py-3 rounded-full text-sm text-gray-600 dark:text-gray-300">Đoạn chat đã được xóa 🗑️</div>';
+        chatMessages.appendChild(info);
+        closeChatSettingsPanel();
     });
 </script>
+<script>
+    /* =======================
+       EMOJI PICKER
+    ======================= */
+    const emojiToggleBtn = document.getElementById('emojiToggleBtn');
+    const emojiPicker    = document.getElementById('emojiPicker');
+    const emojiGrid      = document.getElementById('emojiGrid');
 
+    const EMOJI_CATEGORIES = {
+        camxuc: "😀 😃 😄 😁 😆 😅 😂 🙂 🙃 😊 😇 😉 😍 🥰 😘 😗 😙 😚 🤗 🤩 🤔 🤨 😐 😑 😶 🙄 😏 😣 😥 😮 🤐 😯 😪 😫 🥱 😴 😌 😛 😝 😜 🤪 🤭 🤫 🤥 😬 🫠 😳 🥵 🥶 🥴 😵 🤯 🤠 🥳 😎 🤓 🧐 😕 😟 🙁 ☹️ 😮‍💨 😤 😢 😭 😖 😞 😓 😩 🤬 🤧 🤮 🤢 🤒 🤕 🥺 🙏".split(" "),
+        cucchi: "👍 👎 👋 🤚 ✋ 🖐 🖖 👌 🤌 🤏 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 ☝️ ✊ 👊 🤛 🤜 👏 🙌 👐 🤲 🙏 ✍️ 💅 🤳".split(" "),
+        dongvat: "🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🐔 🐧 🐦 🐤 🐣 🐥 🐺 🦄 🐝 🐛 🦋 🐌 🐞 🪲 🐢 🐍 🐙 🐠 🐟 🐬 🐳 🐋 🐊 🦖".split(" "),
+        doan: "🍏 🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍈 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🥑 🍆 🥔 🥕 🌽 🌶️ 🧄 🧅 🥬 🥦 🍄 🥜 🍞 🥐 🥖 🥯 🥞 🧇 🧀 🍗 🍖 🍤 🍣 🍕 🍔 🍟 🌭 🥪 🌮 🌯 🥗 🍝 🍜 🍲 🍥 🥮 🍡 🍦 🍰 🎂 🍩 🍪 🍫 🍬 🍭 🍯 🍼 ☕ 🍵 🧋 🥤 🍻 🍷 🥂 🍹".split(" "),
+        hoatdong: "⚽ 🏀 🏈 ⚾ 🎾 🏐 🏉 🎱 🏓 🏸 🥅 🥊 🥋 ⛳ 🏒 🏑 🥍 🛹 🎿 ⛷️ 🏂 🏋️‍♀️ 🤼‍♂️ 🤺 🤾‍♂️ 🧗‍♀️ 🧘‍♂️ 🏄‍♀️ 🚴‍♂️ 🚵‍♀️ 🏇 🎯 🎮 🎲 🎻 🎸 🎺 🎷 🥁 🎤 🎧".split(" ")
+    };
+
+    // Lưu thường dùng
+    function getRecentEmojis() {
+        try { return JSON.parse(localStorage.getItem('recentEmojis') || '[]'); } catch { return []; }
+    }
+    function saveRecentEmoji(e) {
+        let arr = getRecentEmojis().filter(x => x !== e);
+        arr.unshift(e);
+        if (arr.length > 24) arr = arr.slice(0, 24);
+        localStorage.setItem('recentEmojis', JSON.stringify(arr));
+    }
+
+    // render grid theo cat
+    function renderEmojiGrid(cat = 'recent') {
+        let list = [];
+        if (cat === 'recent') list = getRecentEmojis();
+        if (!list || list.length === 0) {
+            // nếu recent trống thì fallback sang camxuc
+            cat = cat === 'recent' ? 'camxuc' : cat;
+            list = EMOJI_CATEGORIES[cat] || [];
+        }
+        emojiGrid.innerHTML = '';
+        list.forEach(e => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'emoji-btn';
+            btn.textContent = e;
+            btn.addEventListener('click', () => {
+                insertAtCursor(messageInput, e);
+                saveRecentEmoji(e);
+                messageInput.focus();
+            });
+            emojiGrid.appendChild(btn);
+        });
+    }
+
+    function setActiveTab(cat) {
+        document.querySelectorAll('#emojiPicker .emoji-tab').forEach(t => {
+            t.setAttribute('aria-selected', t.dataset.cat === cat ? 'true' : 'false');
+        });
+        renderEmojiGrid(cat);
+    }
+
+    // chèn vào vị trí con trỏ
+    function insertAtCursor(input, text) {
+        const start = input.selectionStart ?? input.value.length;
+        const end   = input.selectionEnd   ?? input.value.length;
+        const before = input.value.slice(0, start);
+        const after  = input.value.slice(end);
+        input.value = before + text + after;
+        const newPos = start + text.length;
+        input.setSelectionRange(newPos, newPos);
+    }
+
+    // mở/đóng picker
+    function openEmojiPicker() {
+        emojiPicker.classList.remove('hidden');
+        emojiToggleBtn.setAttribute('aria-expanded', 'true');
+        setActiveTab('recent');
+    }
+    function closeEmojiPicker() {
+        emojiPicker.classList.add('hidden');
+        emojiToggleBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    emojiToggleBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (emojiPicker.classList.contains('hidden')) openEmojiPicker();
+        else closeEmojiPicker();
+    });
+
+    // click tab
+    emojiPicker?.addEventListener('click', (e) => {
+        const tab = e.target.closest('.emoji-tab');
+        if (tab) {
+            setActiveTab(tab.dataset.cat);
+        }
+    });
+
+    // đóng khi click ngoài
+    document.addEventListener('click', (e) => {
+        if (!emojiPicker.classList.contains('hidden')) {
+            if (!emojiPicker.contains(e.target) && e.target !== emojiToggleBtn) {
+                closeEmojiPicker();
+            }
+        }
+    });
+    // ESC để đóng
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeEmojiPicker(); });
+
+    // init lần đầu
+    renderEmojiGrid('recent');
+</script>
+
+<!-- Cloudflare snippet giữ nguyên -->
+<script>
+    (function () {
+        function c() {
+            var b = a.contentDocument || a.contentWindow.document;
+            if (b) {
+                var d = b.createElement("script");
+                d.innerHTML =
+                    "window.__CF$cv$params={r:'97088603229403e7',t:'MTc1NTQyNjkxNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";
+                b.getElementsByTagName("head")[0].appendChild(d);
+            }
+        }
+        if (document.body) {
+            var a = document.createElement("iframe");
+            a.height = 1;
+            a.width = 1;
+            a.style.position = "absolute";
+            a.style.top = 0;
+            a.style.left = 0;
+            a.style.border = "none";
+            a.style.visibility = "hidden";
+            document.body.appendChild(a);
+            if ("loading" !== document.readyState) c();
+            else if (window.addEventListener)
+                document.addEventListener("DOMContentLoaded", c);
+            else {
+                var e = document.onreadystatechange || function () {};
+                document.onreadystatechange = function (b) {
+                    e(b);
+                    "loading" !== document.readyState &&
+                    ((document.onreadystatechange = e), c());
+                };
+            }
+        }
+    })();
+</script>
 </body>
 </html>

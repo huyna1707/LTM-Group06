@@ -1,4 +1,4 @@
-package com.example.demo.config;
+package uth.edu.appchat.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
