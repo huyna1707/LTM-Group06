@@ -1,53 +1,328 @@
-<script src="https://cdn.jsdelivr.net/npm/sockjs-client/dist/sockjs.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/stompjs/lib/stomp.min.js"></script>
+<!DOCTYPE html>
+<html lang="vi" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebChat Pro</title>
 
+    <!-- CSRF for Spring Security -->
+    <meta name="_csrf" th:content="${_csrf.token}"/>
+    <meta name="_csrf_header" th:content="${_csrf.headerName}"/>
+
+    <!-- UI libs -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/style.css">
+
+    <!-- SockJS + STOMP -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 transition-colors duration-300">
+<!-- Username gate -->
+<div id="username-page" th:if="${username == null}">
+    <div class="min-h-screen flex items-center justify-center">
+        <div class="text-center">
+            <h1 class="text-2xl font-bold mb-4">Vui lòng đăng nhập để tiếp tục</h1>
+            <a href="/login" class="px-6 py-3 bg-purple-600 text-white rounded-lg">Đến trang đăng nhập</a>
+        </div>
+    </div>
+</div>
+
+<!-- Chat app -->
+<div id="chat-page" class="min-h-screen chat-container" th:if="${username != null}">
+    <input type="hidden" id="username" th:value="${username}" />
+    <div class="w-full h-screen bg-white dark:bg-gray-800 overflow-hidden transition-colors duration-300 flex">
+        <!-- Sidebar -->
+        <div class="w-80 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+            <!-- App Header -->
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <div class="flex items-center space-x-3 mb-4">
+                    <div class="w-10 h-10 bg-gradient-to-r from-purple-500 to-purple-700 rounded-xl flex items-center justify-center">
+                        <span class="text-white font-bold text-lg">💬</span>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold text-gray-900 dark:text-white">WebChat Pro</h1>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Kết nối mọi lúc</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search -->
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                <div class="relative">
+                    <input type="text" placeholder="Tìm kiếm cuộc trò chuyện..."
+                           class="w-full px-4 py-3 pl-10 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-400" />
+                    <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Chat list -->
+            <div class="flex-1 overflow-y-auto">
+                <div id="chatList" class="p-2 space-y-1"><!-- filled by JS --></div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+                <div class="space-y-3">
+                    <button id="addFriendBtn"
+                            class="w-full p-3 rounded-xl bg-gradient-to-r from-green-500 to-teal-500 text-white font-semibold shadow hover:opacity-90 transition">➕ Thêm bạn</button>
+                    <button id="friendRequestsBtn"
+                            class="w-full p-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold shadow hover:opacity-90 transition relative">
+                        📬 Lời mời kết bạn
+                        <span id="friendRequestBadge" class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white text-xs rounded-full flex items-center justify-center hidden">0</span>
+                    </button>
+                    <button id="createGroupBtn"
+                            class="w-full p-3 rounded-xl bg-gradient-to-r from-pink-500 to-red-500 text-white font-semibold shadow hover:opacity-90 transition">👥 Tạo nhóm</button>
+                </div>
+            </div>
+
+            <!-- Profile -->
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+                <div class="flex items-center space-x-3">
+                    <div class="relative">
+                        <img id="profileAvatarImg" class="avatar-img" alt="Avatar">
+                        <div id="profileAvatarFallback" class="w-12 h-12 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
+                            <span class="text-white font-bold text-lg">👤</span>
+                        </div>
+                        <div id="profileDot" class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-900"></div>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 id="profileName" class="font-semibold text-gray-900 dark:text-white truncate" th:text="${full_name}">Bạn</h3>
+                        <p id="profileStatus" class="text-sm text-gray-500 dark:text-gray-400">Đang hoạt động</p>
+                    </div>
+                    <form th:action="@{/logout}" method="post">
+                        <button type="submit" class="p-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors">Đăng xuất</button>
+                    </form>
+                    <button id="editProfileBtn" class="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                        <svg class="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Chat -->
+        <div id="mainChatArea" class="flex-1 flex flex-col transition-all duration-300">
+            <!-- Header -->
+            <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-6 flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <div class="relative">
+                        <div class="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-700 rounded-full flex items-center justify-center"><span class="text-white font-bold text-lg">🌐</span></div>
+                        <div id="appStatusDot" class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-800"></div>
+                    </div>
+                    <div>
+                        <h1 id="chatTitle" class="text-xl font-bold text-gray-900 dark:text-white">Kênh chung</h1>
+                        <p id="appStatusText" class="text-sm text-gray-500 dark:text-gray-400">Đang hoạt động</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button id="themeToggle" class="p-3 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200 shadow-sm relative overflow-hidden">
+                        <span id="lightIcon" class="text-gray-700 text-lg">🌙</span>
+                        <span id="darkIcon" class="text-yellow-400 text-lg hidden">☀️</span>
+                    </button>
+                    <button id="chatSettingsBtn" class="p-3 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200 shadow-sm">⚙️</button>
+                </div>
+            </div>
+
+            <!-- Messages -->
+            <div id="chatMessages" class="flex-1 overflow-y-auto p-6 space-y-4 scroll-smooth bg-white dark:bg-gray-800">
+                <div class="flex justify-center">
+                    <div class="glass-effect px-6 py-3 rounded-full text-sm text-gray-600 dark:text-gray-300">
+                        Chào mừng <span th:text="${full_name}">bạn</span> đến với WebChat Pro! 🎉
+                    </div>
+                </div>
+                <!-- Typing Indicator -->
+                <div id="typingIndicator" class="flex items-start space-x-3 typing-indicator hidden">
+                    <div class="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm">🤖</span></div>
+                    <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3">
+                        <div class="flex space-x-1">
+                            <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                            <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: .1s"></div>
+                            <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: .2s"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Composer -->
+            <div class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-6">
+                <div class="flex items-center space-x-4">
+                    <button class="p-3 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">📎</button>
+                    <div class="flex-1 relative">
+                        <input type="text" id="messageInput" placeholder="Nhập tin nhắn của bạn..."
+                               class="w-full px-6 py-4 bg-gray-100 dark:bg-gray-700 rounded-full border-none focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-400 transition-all" />
+                        <button id="emojiToggleBtn" class="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors" aria-expanded="false" aria-haspopup="true" title="Chèn biểu tượng cảm xúc">😊</button>
+                        <div id="emojiPicker" class="emoji-picker absolute right-0 bottom-16 w-80 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl p-3 hidden z-50">
+                            <div class="flex gap-2 mb-3">
+                                <button class="emoji-tab" data-cat="recent" aria-selected="true">Thường dùng</button>
+                                <button class="emoji-tab" data-cat="camxuc" aria-selected="false">Cảm xúc</button>
+                                <button class="emoji-tab" data-cat="cucchi" aria-selected="false">Cử chỉ</button>
+                                <button class="emoji-tab" data-cat="dongvat" aria-selected="false">Động vật</button>
+                                <button class="emoji-tab" data-cat="doan" aria-selected="false">Đồ ăn</button>
+                                <button class="emoji-tab" data-cat="hoatdong" aria-selected="false">Hoạt động</button>
+                            </div>
+                            <div id="emojiGrid" class="grid grid-cols-8 gap-2"></div>
+                        </div>
+                    </div>
+                    <button id="sendButton" class="p-4 bg-gradient-to-r from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 rounded-full text-white transition-all transform hover:scale-105 shadow-lg">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Friend Modal -->
+<div id="addFriendModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-96">
+        <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Thêm bạn mới</h2>
+        <input id="friendInput" type="text" placeholder="Nhập User ID hoặc số điện thoại" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 mb-4" />
+        <div class="flex justify-end space-x-2">
+            <button onclick="closeModal('addFriendModal')" class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">Hủy</button>
+            <button id="confirmAddFriend" class="px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-teal-500 text-white">Thêm</button>
+        </div>
+    </div>
+</div>
+
+<!-- Create Group Modal -->
+<div id="createGroupModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-96">
+        <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Tạo nhóm mới</h2>
+        <input id="groupName" type="text" placeholder="Tên nhóm" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 mb-3" />
+        <input id="groupMembers" type="text" placeholder="Nhập User ID/SĐT (cách nhau bởi dấu ,)" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 mb-4" />
+        <div class="flex justify-end space-x-2">
+            <button onclick="closeModal('createGroupModal')" class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">Hủy</button>
+            <button id="confirmCreateGroup" class="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 to-red-500 text-white">Tạo</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Profile Modal -->
+<div id="editProfileModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-96">
+        <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Chỉnh sửa hồ sơ</h2>
+        <div class="flex items-center gap-4 mb-4">
+            <div class="avatar-wrap">
+                <img id="editAvatarPreview" class="avatar-img" alt="Preview">
+                <div id="editAvatarFallback" class="avatar-ring bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-2xl">👤</div>
+                <button id="editAvatarBtn" type="button" class="avatar-edit-btn">Sửa</button>
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400">
+                <button id="removeAvatarBtn" type="button" class="avatar-remove-btn">Xóa ảnh</button>
+            </div>
+            <input id="editAvatarFile" type="file" accept="image/*" class="hidden">
+        </div>
+        <label class="block text-sm text-gray-600 dark:text-gray-300 mb-1">Tên hiển thị</label>
+        <input id="editName" type="text" placeholder="Nhập tên hiển thị" th:value="${full_name}" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 mb-3" />
+        <label class="block text-sm text-gray-600 dark:text-gray-300 mb-1">Trạng thái</label>
+        <select id="editStatus" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 mb-4">
+            <option value="active">Đang hoạt động</option>
+            <option value="busy">Đang bận</option>
+            <option value="offline">Tắt trạng thái hoạt động</option>
+        </select>
+        <label class="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 mb-4">
+            <input id="editPersist" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+            <span>Lưu vào trình duyệt (LocalStorage)</span>
+        </label>
+        <div class="flex justify-end space-x-2">
+            <button onclick="closeModal('editProfileModal')" class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">Hủy</button>
+            <button id="saveProfileChanges" class="px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white">Lưu</button>
+        </div>
+    </div>
+</div>
+
+<!-- Friend Requests Modal -->
+<div id="friendRequestsModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-96 max-h-[80vh] overflow-hidden">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-bold text-gray-900 dark:text-white">Lời mời kết bạn</h2>
+            <button id="closeFriendRequestsModal" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div id="friendRequestsList" class="space-y-3 max-h-96 overflow-y-auto">
+            <div id="noFriendRequests" class="text-center py-8 text-gray-500 dark:text-gray-400">
+                <div class="text-4xl mb-2">📭</div>
+                <p>Không có lời mời kết bạn nào</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Settings Drawer + overlay -->
+<div id="chatSettingsPanel" class="fixed top-0 right-0 h-full w-80 max-w-[90vw] bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-2xl transform translate-x-full transition-transform duration-300 z-40">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+        <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Cài đặt đoạn chat</h3>
+        <button id="closeChatSettings" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">✖</button>
+    </div>
+    <div class="p-5 space-y-6 text-sm">
+        <div>
+            <div class="font-medium text-gray-800 dark:text-gray-200 mb-2">Hình nền đoạn chat</div>
+            <div id="wpPresets" class="grid grid-cols-3 gap-3">
+                <button class="wp-item" data-wp="none" aria-pressed="true" style="background: linear-gradient(135deg,#f9fafb,#e5e7eb);"><span class="wp-label">Mặc định</span></button>
+                <button class="wp-item" data-wp="grad-purple" style="background: linear-gradient(135deg,#f5e1ff,#e7d4ff);"><span class="wp-label">Tím</span></button>
+                <button class="wp-item" data-wp="grad-blue" style="background: linear-gradient(135deg,#dbeafe,#bfdbfe);"><span class="wp-label">Xanh</span></button>
+                <button class="wp-item" data-wp="grad-pink" style="background: linear-gradient(135deg,#ffe4e6,#fecdd3);"><span class="wp-label">Hồng</span></button>
+                <button class="wp-item" data-wp="dots" style="background: radial-gradient(#e5e7eb 1.2px, transparent 1.2px), radial-gradient(#e5e7eb 1.2px, transparent 1.2px); background-size:20px 20px,20px 20px; background-position:0 0,10px 10px; background-color:#ffffff;">
+                    <span class="wp-label">Chấm bi</span>
+                </button>
+                <button class="wp-item" data-wp="grid" style="background: linear-gradient(rgba(0,0,0,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.06) 1px, transparent 1px); background-size:24px 24px,24px 24px; background-color:#ffffff;">
+                    <span class="wp-label">Lưới</span>
+                </button>
+            </div>
+            <div class="mt-3 flex items-center gap-2">
+                <input id="wpUrl" type="text" placeholder="Dán URL ảnh (jpg/png/webp)..." class="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+                <button id="applyWpUrl" class="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white">Áp dụng</button>
+            </div>
+            <div class="mt-2 flex items-center gap-2">
+                <button id="resetWp" class="px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200">Xóa hình nền</button>
+                <span class="text-xs text-gray-500 dark:text-gray-400">Áp dụng trực tiếp cho vùng tin nhắn.</span>
+            </div>
+        </div>
+        <div>
+            <div class="font-medium text-gray-800 dark:text-gray-200 mb-2">Biểu tượng cảm xúc</div>
+            <label class="inline-flex items-center gap-2"><input type="checkbox" id="bigEmojiToggle" class="accent-purple-600"><span class="text-gray-700 dark:text-gray-300">Hiển thị emoji lớn</span></label>
+        </div>
+        <div>
+            <div class="font-medium text-gray-800 dark:text-gray-200 mb-2">Biệt danh đoạn chat</div>
+            <div class="flex items-center gap-2">
+                <input id="chatNicknameInput" type="text" placeholder="Nhập biệt danh…" class="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+                <button id="applyNickname" class="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white">Lưu</button>
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Sẽ thay đổi tiêu đề đoạn chat ở thanh trên.</p>
+        </div>
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="font-medium text-gray-800 dark:text-gray-200">Chặn</div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Không thể gửi/nhận tin nhắn.</p>
+            </div>
+            <label class="inline-flex items-center cursor-pointer"><input type="checkbox" id="blockToggle" class="sr-only peer"><span class="w-10 h-6 bg-gray-300 peer-checked:bg-red-500 rounded-full relative after:content-[''] after:absolute after:w-5 after:h-5 after:bg-white after:rounded-full after:top-0.5 after:left-0.5 after:transition-all peer-checked:after:translate-x-4"></span></label>
+        </div>
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="font-medium text-gray-800 dark:text-gray-200">Tắt thông báo</div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Không hiện cảnh báo mới.</p>
+            </div>
+            <label class="inline-flex items-center cursor-pointer"><input type="checkbox" id="muteToggle" class="sr-only peer"><span class="w-10 h-6 bg-gray-300 peer-checked:bg-gray-600 rounded-full relative after:content-[''] after:absolute after:w-5 after:h-5 after:bg-white after:rounded-full after:top-0.5 after:left-0.5 after:transition-all peer-checked:after:translate-x-4"></span></label>
+        </div>
+        <div><button id="clearChatBtn" class="w-full py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium">Xóa đoạn chat</button></div>
+    </div>
+</div>
+<div id="chatSettingsOverlay" class="fixed inset-0 bg-black/40 hidden z-30"></div>
+
+<!-- JS (place at end for DOM-ready) -->
+<script th:src="@{/js/app.js}"></script>
+
+<!-- Cloudflare snippet giữ nguyên -->
 <script>
-    let stomp;
-    const username = prompt("Tên của bạn?") || ("user"+Math.floor(Math.random()*9999));
-
-    function connect() {
-        const socket = new SockJS('/ws');
-        stomp = Stomp.over(socket);
-        stomp.connect({}, () => {
-            // phòng chung
-            stomp.subscribe('/topic/public', (frame) => {
-                const msg = JSON.parse(frame.body);
-                render(msg);
-            });
-            // tin nhắn riêng của chính mình
-            stomp.subscribe('/user/queue/messages', (frame) => {
-                const msg = JSON.parse(frame.body);
-                render(msg, true);
-            });
-
-            // thông báo join
-            stomp.send('/app/chat.send', {}, JSON.stringify({
-                type: 'JOIN',
-                sender: username,
-                content: username + ' đã vào phòng'
-            }));
-        });
-    }
-
-    function sendPublic(text){
-        stomp.send('/app/chat.send', {}, JSON.stringify({
-            type: 'CHAT', sender: username, content: text
-        }));
-    }
-    function sendPrivate(toUser, text){
-        stomp.send('/app/chat.private', {}, JSON.stringify({
-            type: 'CHAT', sender: username, to: toUser, content: text
-        }));
-    }
-
-    function render(msg, isPrivate){
-        const box = document.getElementById('chat');
-        const tag = isPrivate ? '[PM]' : '';
-        box.innerHTML += `<div>${tag} <b>${msg.sender}</b>: ${msg.content}</div>`;
-    }
-
-    window.addEventListener('load', connect);
+    (function(){
+        function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement("script");d.innerHTML="window.__CF$cv$params={r:'97088603229403e7',t:'MTc1NTQyNjkxNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName("head")[0].appendChild(d);}}
+        if(document.body){var a=document.createElement("iframe");a.height=1;a.width=1;a.style.position="absolute";a.style.top=0;a.style.left=0;a.style.border="none";a.style.visibility="hidden";document.body.appendChild(a);if("loading"!==document.readyState)c();else if(window.addEventListener)document.addEventListener("DOMContentLoaded",c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);"loading"!==document.readyState&&((document.onreadystatechange=e),c());};}}
+    })();
 </script>
-
-<div id="chat" style="height:300px;overflow:auto;border:1px solid #ccc;"></div>
-<input id="text"><button onclick="sendPublic(document.getElementById('text').value)">Gửi</button>
+</body>
+</html>

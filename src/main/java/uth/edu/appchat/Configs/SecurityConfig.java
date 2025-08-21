@@ -4,14 +4,15 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.core.userdetails.*;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository; // <-- thêm import này
 import uth.edu.appchat.Repositories.UserRepository;
 
 @Configuration
@@ -37,24 +38,23 @@ public class SecurityConfig {
         };
     }
 
-    // Expose AuthenticationManager for constructor injection (used by AuthController)
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
-        return configuration.getAuthenticationManager();
+    public AuthenticationManager authenticationManager(UserDetailsService uds, PasswordEncoder pe) {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(uds);
+        provider.setPasswordEncoder(pe);
+        return new ProviderManager(provider);
     }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                // Enable CSRF with cookie exposure for Thymeleaf and ignore it for WebSocket endpoints
-                .csrf(csrf -> csrf
-                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                        .ignoringRequestMatchers("/ws/**")
-                )
+                // BẬT CSRF và dùng CookieCsrfTokenRepository để Thymeleaf lấy được ${_csrf}
+                .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/", "/home", "/login", "/signup", "/register",
                                 "/css/**","/js/**","/images/**","/webjars/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/signup").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/signup").permitAll()         // <-- mở POST /signup
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
                         .anyRequest().authenticated()
                 )
