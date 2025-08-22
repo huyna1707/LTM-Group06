@@ -74,7 +74,7 @@ public class PrivateMessage {
     // đổi tên cột read -> is_read
     @Column(name = "is_read", nullable = false)
     @Builder.Default
-    private Boolean read = false;
+    private Boolean isRead = false;
 
     @Column(name = "read_at")
     private LocalDateTime readAt;
@@ -98,7 +98,7 @@ public class PrivateMessage {
             orphanRemoval = true,
             fetch = FetchType.LAZY
     )
-    @OrderBy("createdAt ASC")
+    @OrderBy("uploadedAt ASC")
     @Builder.Default
     private List<FileAttachment> attachments = new ArrayList<>();
 
@@ -111,7 +111,7 @@ public class PrivateMessage {
     private void prePersistDefaults() {
         if (messageType == null) messageType = MessageType.TEXT;
         if (delivered == null) delivered = false;
-        if (read == null) read = false;
+        if (isRead == null) isRead = false;
         if (deleted == null) deleted = false;
     }
 
@@ -123,8 +123,8 @@ public class PrivateMessage {
     }
 
     public void markAsRead() {
-        if (Boolean.TRUE.equals(this.read)) return;
-        this.read = true;
+        if (Boolean.TRUE.equals(this.isRead)) return;
+        this.isRead = true;
         this.readAt = LocalDateTime.now();
         if (!Boolean.TRUE.equals(this.delivered)) {
             markAsDelivered();
@@ -140,7 +140,7 @@ public class PrivateMessage {
 
     /** ✓ (đã gửi), ✓✓ xám (đã đến), ✓✓ xanh (đã xem) – tuỳ UI bạn map màu */
     public String getStatusIcon() {
-        if (Boolean.TRUE.equals(read)) return "viewed";      // viewed
+        if (Boolean.TRUE.equals(isRead)) return "viewed";      // viewed
         if (Boolean.TRUE.equals(delivered)) return "delivered"; // delivered
         return "sending";                                      // sending
     }

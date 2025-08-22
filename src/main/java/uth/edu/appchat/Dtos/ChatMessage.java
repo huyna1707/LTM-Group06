@@ -1,13 +1,13 @@
 package uth.edu.appchat.Dtos;
 
-import lombok.Data;
-
-@Data
+import lombok.*;
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class ChatMessage {
-    public enum Type { CHAT, JOIN, LEAVE }
-    private Type type;
-    private String content;
+    public enum Type { JOIN, CHAT, LEAVE }
     private String sender;
+    private String fullName;
+    private String content;
     private String to;
-    private long timestamp;
+    private Type type;
+    private String timestamp;
 }

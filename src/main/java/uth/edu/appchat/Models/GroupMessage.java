@@ -46,5 +46,5 @@ public class GroupMessage {
     @Column(name="is_pinned", nullable=false)
     private Boolean isPinned = false;
 
-    public enum MessageType { TEXT, IMAGE, FILE }
+    public enum MessageType { TEXT, IMAGE, SYSTEM, FILE }
 }

@@ -9,14 +9,16 @@ import java.util.List;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
-    // Original methods that might cause duplicate issues
-    @Query("SELECT u FROM User u WHERE u.username = :username ORDER BY u.id ASC")
-    List<User> findAllByUsername(@Param("username") String username);
 
-    @Query("SELECT u FROM User u WHERE u.email = :email ORDER BY u.id ASC")
-    List<User> findAllByEmail(@Param("email") String email);
+    // ✅ Chỉ cần 1 giá trị → kiểm tra username, phone hoặc email
+    @Query("SELECT u FROM User u WHERE u.username = :value OR u.phone = :value OR u.email = :value")
+    Optional<User> findByUsernameOrPhoneOrEmail(@Param("value") String value);
 
-    // Safe wrapper methods that handle duplicates
+    // Các hàm hỗ trợ tìm tất cả theo username/email
+    List<User> findAllByUsername(String username);
+    List<User> findAllByEmail(String email);
+
+    // Safe wrapper nếu có duplicate
     default Optional<User> findByUsername(String username) {
         List<User> users = findAllByUsername(username);
         return users.isEmpty() ? Optional.empty() : Optional.of(users.get(0));
@@ -27,7 +29,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
         return users.isEmpty() ? Optional.empty() : Optional.of(users.get(0));
     }
 
+    // Kiểm tra tồn tại
     boolean existsByUsername(String username);
-
     boolean existsByEmail(String email);
 }
