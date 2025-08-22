@@ -3,7 +3,7 @@ package uth.edu.appchat.Services;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import uth.edu.appchat.Dtos.AuthDtos.RegisterRequest;
+import uth.edu.appchat.Dtos.RegisterRequest;
 import uth.edu.appchat.Models.User;
 import uth.edu.appchat.Repositories.UserRepository;
 
@@ -20,26 +20,21 @@ public class UserService {
 
     @Transactional
     public User register(RegisterRequest req) {
+        if (!req.getPassword().equals(req.getConfirmPassword())) {
+            throw new IllegalArgumentException("Mật khẩu xác nhận không khớp");
+        }
         if (userRepo.existsByUsername(req.getUsername())) {
-            throw new IllegalArgumentException("Username đã tồn tại");
+            throw new IllegalArgumentException("Tên đăng nhập đã tồn tại");
         }
         if (userRepo.existsByEmail(req.getEmail())) {
             throw new IllegalArgumentException("Email đã tồn tại");
         }
-        User u = new User();
-        u.setUsername(req.getUsername());
-        u.setEmail(req.getEmail());
-        u.setFullName(req.getFullName());
-        u.setPasswordHash(passwordEncoder.encode(req.getPassword()));
-        return userRepo.save(u);
-    }
 
-    public User getByUsernameOrEmail(String key) {
-        return userRepo.findByUsername(key).or(
-                () -> userRepo.findByEmail(key)).orElse(null);
-    }
-
-    public boolean checkPassword(User user, String rawPassword) {
-        return passwordEncoder.matches(rawPassword, user.getPasswordHash());
+        User user = new User();
+        user.setUsername(req.getUsername());
+        user.setEmail(req.getEmail());
+        user.setFullName(req.getFullName());
+        user.setPasswordHash(passwordEncoder.encode(req.getPassword()));
+        return userRepo.save(user);
     }
 }

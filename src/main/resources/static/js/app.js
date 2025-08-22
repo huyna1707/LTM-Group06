@@ -472,17 +472,7 @@ function displayGroupMessage(message, autoScroll = true) {
 /* ========================================================
    FRIEND SYSTEM
 ======================================================== */
-async function showAddFriendDialog() {
-  const uname = prompt("Nhập tên người dùng bạn muốn kết bạn:");
-  if (!uname) return;
-  try {
-    const res = await fetch('/api/friends/send-request', {
-      method:'POST', headers:{ 'Content-Type':'application/json', [csrfHeader]: csrfToken }, body: JSON.stringify({ username: uname })
-    });
-    if (res.ok) showSuccessMessage(`Đã gửi lời mời kết bạn tới ${uname}`);
-    else showErrorMessage(`Lỗi: ${await res.text()}`);
-  } catch (e) { console.error('Error sending friend request:', e); showErrorMessage('Có lỗi xảy ra khi gửi lời mời kết bạn'); }
-}
+
 
 async function loadPendingFriendRequests() {
   try {
@@ -549,15 +539,6 @@ async function rejectFriendRequest(userId) {
     if (res.ok) { showSuccessMessage('Đã từ chối lời mời kết bạn'); showFriendRequestsModal(); }
     else showErrorMessage(`Lỗi: ${await res.text()}`);
   } catch (e) { console.error('Error rejecting friend request:', e); showErrorMessage('Có lỗi xảy ra'); }
-}
-async function showCreateGroupDialog() {
-  const name = prompt("Nhập tên nhóm chat:");
-  if (!name) return;
-  try {
-    const res = await fetch('/api/groups/create', { method:'POST', headers:{ 'Content-Type':'application/json', [csrfHeader]: csrfToken }, body: JSON.stringify({ name }) });
-    if (res.ok) { const group = await res.json(); showSuccessMessage(`Đã tạo nhóm "${name}" thành công`); loadGroupsList(); switchToGroupChat(group); }
-    else showErrorMessage(`Lỗi: ${await res.text()}`);
-  } catch (e) { console.error('Error creating group:', e); showErrorMessage('Có lỗi xảy ra khi tạo nhóm'); }
 }
 
 /* ========================================================
@@ -731,10 +712,6 @@ document.addEventListener('DOMContentLoaded', function(){
   $('#addFriendBtn')?.addEventListener('click', showAddFriendDialog);
   $('#createGroupBtn')?.addEventListener('click', showCreateGroupDialog);
 
-  // Friend requests modal
-  $('#friendRequestsBtn')?.addEventListener('click', showFriendRequestsModal);
-  $('#closeFriendRequestsModal')?.addEventListener('click', ()=>{ const modal=$('#friendRequestsModal'); modal?.classList.add('hidden'); });
-  $('#friendRequestsModal')?.addEventListener('click', function(e){ if (e.target===this) this.classList.add('hidden'); });
 
   // Search chats (basic)
   const searchInput = document.querySelector('input[placeholder="Tìm kiếm cuộc trò chuyện..."]');
