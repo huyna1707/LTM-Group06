@@ -46,5 +46,8 @@ public class GroupMessage {
     @Column(name="is_pinned", nullable=false)
     private Boolean isPinned = false;
 
+    @Column(name="pinned_at")
+    private LocalDateTime pinnedAt;
+
     public enum MessageType { TEXT, IMAGE, SYSTEM, FILE }
 }

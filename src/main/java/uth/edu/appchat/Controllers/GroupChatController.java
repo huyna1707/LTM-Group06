@@ -12,6 +12,7 @@ import uth.edu.appchat.Models.GroupChat;
 import uth.edu.appchat.Models.User;
 import uth.edu.appchat.Repositories.UserRepository;
 import uth.edu.appchat.Services.GroupChatService;
+import uth.edu.appchat.Services.ChatStreakService;
 
 import java.security.Principal;
 
@@ -20,6 +21,7 @@ import java.security.Principal;
 public class GroupChatController {
     private final GroupChatService groupChatService;
     private final UserRepository userRepo;
+    private final ChatStreakService chatStreakService;
 
     @GetMapping("/groups/new")
     public String showCreateGroupForm(Model model) {
