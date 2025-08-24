@@ -444,13 +444,12 @@ function displayGroupMessage(message, autoScroll = true) {
   const isMe = message.sender.username === username;
   const displayName = message.sender.fullName || message.sender.username;
   const initials = getInitials(displayName);
-  const gradient = pickGradient(simpleHash(message.sender.username||''));
-  const time = new Date(message.timestamp).toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
-
+  const gradient = pickGradient(simpleHash(message.sender.username || ''));
+  const time = new Date(message.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   if (isMe) {
     div.classList.add('justify-end');
     div.innerHTML = `
-      <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md">
+      <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md break-words">
         <p class="text-white">${message.content}</p>
         <div class="flex items-center justify-end mt-1"><span class="text-xs text-purple-100">${time}</span></div>
       </div>
@@ -459,7 +458,7 @@ function displayGroupMessage(message, autoScroll = true) {
     div.classList.add('items-start');
     div.innerHTML = `
       <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>
-      <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md">
+      <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md break-words">
         <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">${displayName}</div>
         <p class="text-gray-800 dark:text-gray-200">${message.content}</p>
         <div class="flex items-center justify-end mt-1"><span class="text-xs text-gray-500 dark:text-gray-400">${time}</span></div>
