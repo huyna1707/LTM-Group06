@@ -912,7 +912,8 @@ $("#saveProfileChanges")?.addEventListener('click', async ()=>{
       },
       body: JSON.stringify({
         fullName: newName,
-        status: safeKey
+        status: safeKey,
+        avatarUrl: localStorage.getItem('profileAvatar') || ""
       })
     });
 
@@ -929,10 +930,16 @@ $("#saveProfileChanges")?.addEventListener('click', async ()=>{
         localStorage.setItem('profileName', newName);
         localStorage.setItem('profileStatusKey', safeKey);
         localStorage.setItem('profileStatus', STATUS_MAP[safeKey].label);
+        // Also persist avatar if it exists
+        const currentAvatar = localStorage.getItem('profileAvatar');
+        if (currentAvatar) {
+          localStorage.setItem('profileAvatar', currentAvatar);
+        }
       } else {
         localStorage.removeItem('profileName');
         localStorage.removeItem('profileStatusKey');
         localStorage.removeItem('profileStatus');
+        localStorage.removeItem('profileAvatar');
       }
       
       // Show success message
@@ -973,6 +980,15 @@ async function loadProfileFromDatabase() {
       
       if (profile.status) {
         updateStatusUI(profile.status);
+      }
+      
+      // Update avatar from database if available
+      if (profile.avatarUrl) {
+        applyAvatar(profile.avatarUrl);
+        // Only override localStorage if no local avatar exists
+        if (!localStorage.getItem('profileAvatar')) {
+          localStorage.setItem('profileAvatar', profile.avatarUrl);
+        }
       }
       
       // Only override localStorage if no local data exists

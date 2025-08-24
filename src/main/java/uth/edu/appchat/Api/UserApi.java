@@ -51,7 +51,8 @@ public class UserApi {
                     "username", user.getUsername(),
                     "fullName", user.getFullName() != null ? user.getFullName() : user.getUsername(),
                     "status", frontendStatus,
-                    "email", user.getEmail()
+                    "email", user.getEmail(),
+                    "avatarUrl", user.getAvatarUrl() != null ? user.getAvatarUrl() : ""
             ));
 
         } catch (Exception e) {
@@ -73,6 +74,16 @@ public class UserApi {
                 String newFullName = profileData.get("fullName").trim();
                 if (!newFullName.isEmpty()) {
                     user.setFullName(newFullName);
+                }
+            }
+
+            // Update avatar URL
+            if (profileData.containsKey("avatarUrl")) {
+                String avatarUrl = profileData.get("avatarUrl");
+                if (avatarUrl != null && !avatarUrl.isEmpty()) {
+                    user.setAvatarUrl(avatarUrl);
+                } else {
+                    user.setAvatarUrl(null); // Clear avatar
                 }
             }
 
