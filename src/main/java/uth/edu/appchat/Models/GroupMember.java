@@ -44,4 +44,19 @@ public class GroupMember {
     private Boolean isActive = true;
 
     public enum GroupRole { ADMIN, MODERATOR, MEMBER }
+
+    @Column(name = "nickname", length = 100)
+    private String nickname;
+
+    @Column(name = "nickname_updated_by")
+    private Long nicknameUpdatedBy;
+
+    @Column(name = "nickname_updated_at")
+    private LocalDateTime nicknameUpdatedAt;
+
+    @Column(name = "cleared_at")
+    private LocalDateTime clearedAt;
+
+    public LocalDateTime getClearedAt() { return clearedAt; }
+    public void setClearedAt(LocalDateTime t) { this.clearedAt = t; }
 }

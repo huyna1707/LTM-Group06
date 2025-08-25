@@ -14,7 +14,6 @@ import java.util.List;
 @Table(
         name = "private_chats",
         uniqueConstraints = {
-                // đảm bảo 1 cặp (user1, user2) chỉ có 1 cuộc chat
                 @UniqueConstraint(name = "uk_private_chat_user_pair", columnNames = {"user1_id", "user2_id"})
         },
         indexes = {
@@ -23,7 +22,6 @@ import java.util.List;
                 @Index(name = "idx_private_chat_last_msg_at", columnList = "last_message_at")
         }
 )
-// chặn trường hợp user1_id = user2_id
 @Check(constraints = "user1_id <> user2_id")
 @Getter @Setter
 @NoArgsConstructor
@@ -38,7 +36,6 @@ public class PrivateChat {
     @EqualsAndHashCode.Include
     private Long id;
 
-    // luôn để LAZY để tránh n+1 và payload lớn
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user1_id", nullable = false,
             foreignKey = @ForeignKey(name = "fk_private_chat_user1"))
@@ -53,22 +50,30 @@ public class PrivateChat {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    // cập nhật ở service khi có tin nhắn mới
     @Column(name = "last_message_at")
     private LocalDateTime lastMessageAt;
 
-    @OneToMany(
-            mappedBy = "privateChat",
-            cascade = CascadeType.ALL,
-            orphanRemoval = true,
-            fetch = FetchType.LAZY
-    )
+    @OneToMany(mappedBy = "privateChat", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("createdAt ASC")
-    @JsonIgnore // tránh vòng lặp khi serialize Chat -> messages -> chat...
+    @JsonIgnore
     @Builder.Default
     private List<PrivateMessage> messages = new ArrayList<>();
 
-    /** trả về người còn lại trong phòng (null nếu không thuộc phòng) */
+    /* === Biệt danh & version mới thêm === */
+    @Column(name = "nickname", length = 100)
+    private String nickname;
+
+    @Column(name = "nickname_updated_by")
+    private Long nicknameUpdatedBy;
+
+    @Column(name = "nickname_updated_at")
+    private LocalDateTime nicknameUpdatedAt;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
+    /* === tiện ích === */
     public User getOtherUser(User currentUser) {
         if (currentUser == null) return null;
         if (currentUser.equals(user1)) return user2;
@@ -76,13 +81,11 @@ public class PrivateChat {
         return null;
     }
 
-    /** kiểm tra user có thuộc phòng này không */
     public boolean containsUser(User user) {
         if (user == null) return false;
         return user.equals(user1) || user.equals(user2);
     }
 
-    /** chuẩn hoá cặp user theo ID (user1.id < user2.id) để không trùng (A-B vs B-A) */
     public void normalizePairById() {
         if (user1 != null && user2 != null
                 && user1.getId() != null && user2.getId() != null
@@ -93,12 +96,10 @@ public class PrivateChat {
         }
     }
 
-    /** cập nhật mốc thời gian tin nhắn cuối cùng */
     public void touchLastMessageAt() {
         this.lastMessageAt = LocalDateTime.now();
     }
 
-    // đảm bảo chuẩn hoá trước khi lưu/cập nhật
     @PrePersist
     @PreUpdate
     private void enforcePairAndIntegrity() {
@@ -110,4 +111,26 @@ public class PrivateChat {
         }
         normalizePairById();
     }
+
+    @Column(name = "cleared_at_user1")
+    private LocalDateTime clearedAtUser1;
+
+    @Column(name = "cleared_at_user2")
+    private LocalDateTime clearedAtUser2;
+
+    /** trả về mốc xóa cục bộ ứng với người dùng đang xem */
+    public LocalDateTime getClearedAtFor(User u) {
+        if (u == null) return null;
+        if (u.equals(user1)) return clearedAtUser1;
+        if (u.equals(user2)) return clearedAtUser2;
+        return null;
+    }
+
+    /** đặt mốc xóa cục bộ cho người dùng đang xem */
+    public void setClearedAtFor(User u, LocalDateTime t) {
+        if (u == null) return;
+        if (u.equals(user1)) this.clearedAtUser1 = t;
+        else if (u.equals(user2)) this.clearedAtUser2 = t;
+    }
 }
+

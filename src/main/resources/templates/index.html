@@ -11,6 +11,10 @@
 
   <!-- UI libs -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- (THÊM) cấu hình dark mode -->
+  <script>
+    tailwind.config = { darkMode: "class" };
+  </script>
   <link rel="stylesheet" href="/css/style.css">
 
   <!-- SockJS + STOMP -->
@@ -50,7 +54,8 @@
       <!-- Search -->
       <div class="p-4 border-b border-gray-200 dark:border-gray-700">
         <div class="relative">
-          <input type="text" placeholder="Tìm kiếm cuộc trò chuyện..."
+          <!-- (THÊM) id chatSearchInput -->
+          <input id="chatSearchInput" type="text" placeholder="Tìm kiếm cuộc trò chuyện..."
                  class="w-full px-4 py-3 pl-10 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-400" />
           <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
@@ -85,7 +90,6 @@
                   class="w-1/3 p-3 rounded-xl bg-gradient-to-r from-pink-500 to-red-500 text-white font-semibold shadow hover:opacity-90 transition text-xl">👥</button>
         </div>
       </div>
-
 
       <!-- Profile -->
       <div class="p-4 border-t border-gray-200 dark:border-gray-700">
@@ -129,9 +133,11 @@
           </div>
         </div>
         <div class="flex items-center space-x-3">
-          <button id="themeToggle" class="p-3 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200 shadow-sm relative overflow-hidden">
-            <span id="lightIcon" class="text-gray-700 text-lg">🌙</span>
-            <span id="darkIcon" class="text-yellow-400 text-lg hidden">☀️</span>
+          <!-- (THAY NỘI DUNG THEO BẢN MỚI nhưng giữ id cũ) Nút toggle theme có icon + text -->
+          <button id="themeToggle"
+                  class="px-4 py-2 rounded-xl border shadow toolbar-float flex items-center gap-2 transition bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">
+            <span id="themeIcon">🌙</span>
+            <span id="themeText" class="font-semibold">Dark</span>
           </button>
           <button id="chatSettingsBtn" class="p-3 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200 shadow-sm">⚙️</button>
         </div>
@@ -223,7 +229,6 @@
   </div>
 </form>
 
-
 <!-- Edit Profile Modal -->
 <div id="editProfileModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
   <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-96">
@@ -275,13 +280,23 @@
     </div>
   </div>
 </div>
-
 <!-- Settings Drawer + overlay -->
-<div id="chatSettingsPanel" class="fixed top-0 right-0 h-full w-80 max-w-[90vw] bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-2xl transform translate-x-full transition-transform duration-300 z-40">
-  <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+<div
+        id="chatSettingsPanel"
+        class="fixed top-0 right-0 w-80 max-w-[90vw]
+         h-screen overflow-y-auto overscroll-contain
+         bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700
+         shadow-2xl transform translate-x-full transition-transform duration-300 z-40">
+
+  <!-- Header dính trên cùng khi cuộn -->
+  <div class="sticky top-0 z-10 flex items-center justify-between px-5 py-4
+              bg-white/80 dark:bg-gray-900/80 backdrop-blur
+              border-b border-gray-200 dark:border-gray-700">
     <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Cài đặt đoạn chat</h3>
     <button id="closeChatSettings" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">✖</button>
   </div>
+
+  <!-- Nội dung sẽ cuộn bên trong panel -->
   <div class="p-5 space-y-6 text-sm">
     <div>
       <div class="font-medium text-gray-800 dark:text-gray-200 mb-2">Hình nền đoạn chat</div>
@@ -306,18 +321,43 @@
         <span class="text-xs text-gray-500 dark:text-gray-400">Áp dụng trực tiếp cho vùng tin nhắn.</span>
       </div>
     </div>
+
     <div>
       <div class="font-medium text-gray-800 dark:text-gray-200 mb-2">Biểu tượng cảm xúc</div>
       <label class="inline-flex items-center gap-2"><input type="checkbox" id="bigEmojiToggle" class="accent-purple-600"><span class="text-gray-700 dark:text-gray-300">Hiển thị emoji lớn</span></label>
     </div>
+
     <div>
       <div class="font-medium text-gray-800 dark:text-gray-200 mb-2">Biệt danh đoạn chat</div>
-      <div class="flex items-center gap-2">
-        <input id="chatNicknameInput" type="text" placeholder="Nhập biệt danh…" class="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
-        <button id="applyNickname" class="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white">Lưu</button>
+
+      <div class="space-y-3" id="nicknameArea">
+        <div class="flex items-center gap-2">
+          <input id="chatNicknameInput" type="text" placeholder="Nhập biệt danh…"
+                 class="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+          <button id="applyNickname"
+                  class="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white">Lưu</button>
+        </div>
+
+        <div id="memberNicknamesSection" class="space-y-2 hidden">
+          <div class="flex items-center gap-2">
+            <input id="memberSearchInput" type="text" placeholder="Tìm thành viên…"
+                   class="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+            <button id="saveMemberNicknamesBtn"
+                    class="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white">Lưu biệt danh</button>
+          </div>
+
+          <div id="memberNicknameList"
+               class="space-y-2 max-h-72 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-2 bg-white dark:bg-gray-800">
+            <!-- render bằng JS -->
+          </div>
+
+          <p class="text-xs text-gray-500 dark:text-gray-400">
+            Chỉ bạn thấy biệt danh bạn đặt cho từng thành viên.
+          </p>
+        </div>
       </div>
-      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Sẽ thay đổi tiêu đề đoạn chat ở thanh trên.</p>
     </div>
+
     <div class="flex items-center justify-between">
       <div>
         <div class="font-medium text-gray-800 dark:text-gray-200">Chặn</div>
@@ -325,6 +365,7 @@
       </div>
       <label class="inline-flex items-center cursor-pointer"><input type="checkbox" id="blockToggle" class="sr-only peer"><span class="w-10 h-6 bg-gray-300 peer-checked:bg-red-500 rounded-full relative after:content-[''] after:absolute after:w-5 after:h-5 after:bg-white after:rounded-full after:top-0.5 after:left-0.5 after:transition-all peer-checked:after:translate-x-4"></span></label>
     </div>
+
     <div class="flex items-center justify-between">
       <div>
         <div class="font-medium text-gray-800 dark:text-gray-200">Tắt thông báo</div>
@@ -332,54 +373,57 @@
       </div>
       <label class="inline-flex items-center cursor-pointer"><input type="checkbox" id="muteToggle" class="sr-only peer"><span class="w-10 h-6 bg-gray-300 peer-checked:bg-gray-600 rounded-full relative after:content-[''] after:absolute after:w-5 after:h-5 after:bg-white after:rounded-full after:top-0.5 after:left-0.5 after:transition-all peer-checked:after:translate-x-4"></span></label>
     </div>
-    <div><button id="clearChatBtn" class="w-full py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium">Xóa đoạn chat</button></div>
+
+    <div>
+      <button id="clearChatBtn" class="w-full py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium">Xóa đoạn chat</button>
+    </div>
   </div>
 </div>
 
+
 <script>
-    function openModal(modalId) {
+  function openModal(modalId) {
     document.getElementById(modalId)?.classList.remove('hidden');
   }
 
-    function closeModal(modalId) {
+  function closeModal(modalId) {
     document.getElementById(modalId)?.classList.add('hidden');
   }
 
-    // Bắt sự kiện từ các nút mở modal
-    document.getElementById('addFriendBtn')?.addEventListener('click', () => {
+  // Bắt sự kiện từ các nút mở modal
+  document.getElementById('addFriendBtn')?.addEventListener('click', () => {
     openModal('addFriendModal');
   });
 
-    document.getElementById('createGroupBtn')?.addEventListener('click', () => {
+  document.getElementById('createGroupBtn')?.addEventListener('click', () => {
     openModal('createGroupModal');
   });
 
-    // Mở modal khi nhấn nút 🔔
-    const openBtn = document.getElementById('friendRequestsBtn');
-    const modal = document.getElementById('friendRequestsModal');
-    const closeBtn = document.getElementById('closeFriendRequestsModal');
+  // Mở modal khi nhấn nút 🔔
+  const openBtn = document.getElementById('friendRequestsBtn');
+  const modal = document.getElementById('friendRequestsModal');
+  const closeBtn = document.getElementById('closeFriendRequestsModal');
 
-    if (openBtn) {
-      openBtn.addEventListener('click', () => {
-        modal.classList.remove('hidden');
-      });
-    }
+  if (openBtn) {
+    openBtn.addEventListener('click', () => {
+      modal.classList.remove('hidden');
+    });
+  }
 
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      modal.classList.add('hidden');
+    });
+  }
+
+  // Nhấn vào vùng tối bên ngoài => đóng modal
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
         modal.classList.add('hidden');
-      });
-    }
-
-    // Nhấn vào vùng tối bên ngoài => đóng modal
-    if (modal) {
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-          modal.classList.add('hidden');
-        }
-      });
-    }
-
+      }
+    });
+  }
 </script>
 <!-- JS (place at end for DOM-ready) -->
 <script th:src="@{/js/app.js}"></script>

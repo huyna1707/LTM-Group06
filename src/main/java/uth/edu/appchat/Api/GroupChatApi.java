@@ -13,6 +13,8 @@ import uth.edu.appchat.Models.User;
 import uth.edu.appchat.Repositories.UserRepository;
 import uth.edu.appchat.Services.GroupChatService;
 import java.util.List;
+import uth.edu.appchat.Dtos.MemberNicknameDTO;
+import java.security.Principal;
 
 @RestController
 @RequestMapping("/api/groups")
@@ -47,5 +49,24 @@ public class GroupChatApi {
     public ResponseEntity<GroupMessageDTO> sendGroupMessage(@PathVariable Long groupId, @RequestBody MessageContentDTO contentDTO) {
         GroupMessageDTO message = groupChatService.sendGroupMessage(groupId, contentDTO.getContent());
         return ResponseEntity.ok(message);
+    }
+
+    @GetMapping("/{groupId}/members-with-nickname")
+    public List<MemberNicknameDTO> members(@PathVariable Long groupId) {
+        return groupChatService.getMembersWithNickname(groupId);
+    }
+
+    // POST /api/groups/{groupId}/nicknames
+    @PostMapping("/{groupId}/nicknames")
+    public ResponseEntity<Void> save(@PathVariable Long groupId,
+                                     @RequestBody List<MemberNicknameDTO> payload,
+                                     Principal principal) {
+        groupChatService.saveMemberNicknames(groupId, principal.getName(), payload);
+        return ResponseEntity.ok().build();
+    }
+    @PostMapping("/{groupId}/clear")
+    public ResponseEntity<Void> clearForMe(@PathVariable Long groupId) {
+        groupChatService.clearGroupForMe(groupId);
+        return ResponseEntity.ok().build();
     }
 }
