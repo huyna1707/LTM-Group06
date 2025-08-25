@@ -81,7 +81,15 @@ function simpleHash(str) {
 /* ========================================================
    WEBSOCKET + STOMP
 ======================================================== */
+let isConnected = false;
+let subs = {}; // lưu các subscription để tránh đăng ký trùng
 function connect(event) {
+  // Nếu đã kết nối thì thôi
+  if (isConnected && stompClient?.connected) {
+    event?.preventDefault?.();
+    return;
+  }
+
   username = $('#username')?.value.trim();
   if (username) {
     const socket = new SockJS('/ws');
@@ -90,18 +98,27 @@ function connect(event) {
     if (csrfHeader && csrfToken) headers[csrfHeader] = csrfToken;
     stompClient.connect(headers, onConnected, onError);
   }
-  event?.preventDefault();
+  event?.preventDefault?.();
 }
+
+
 
 function onConnected() {
   console.log('✅ Connected to WebSocket');
+  isConnected = true;
 
+  // Hủy subs cũ (nếu có) để không bị đăng ký chồng
+  Object.values(subs).forEach(s => s?.unsubscribe?.());
+  subs = {};
+  3
   stompClient.subscribe('/topic/public', onPublicMessageReceived);
   stompClient.subscribe('/topic/user-status', onUserStatusChanged);
-  stompClient.subscribe(`/user/${username}/private`, onPrivateMessageReceived);
-  stompClient.subscribe(`/user/${username}/friend-request`, onFriendRequestReceived);
-  stompClient.subscribe(`/user/${username}/group`, onGroupMessageReceived);
-
+  // stompClient.subscribe(`/user/${username}/private`, onPrivateMessageReceived);
+  // stompClient.subscribe(`/user/${username}/friend-request`, onFriendRequestReceived);
+  // stompClient.subscribe(`/user/${username}/group`, onGroupMessageReceived);
+   stompClient.subscribe('/user/queue/private',        onPrivateMessageReceived);
+   stompClient.subscribe('/user/queue/friend-request', onFriendRequestReceived);
+   stompClient.subscribe('/user/queue/group',          onGroupMessageReceived);
   loadInitialData();
   loadPendingFriendRequests();
   stompClient.send('/app/chat.join', {}, JSON.stringify({ sender: username, type: 'JOIN' }));
@@ -127,7 +144,7 @@ function onPrivateMessageReceived(payload) {
   if (currentChat?.type === 'private' && blockToggle?.checked) {
     return;
   }
-  if (currentChat?.type === 'private' && currentChat?.id === message.senderId) {
+  if (currentChat?.type === 'private' && currentChat?.id === (message.chatId ?? message.privateChatId)) {
     displayPrivateMessage(message, true);
   }
   updateChatListWithNewMessage(message);
@@ -411,17 +428,24 @@ function sendPublicMessage(content) {
 async function sendPrivateMessage(content) {
   try {
     const res = await fetch(`/api/private-chat/${currentChat.id}/send`, {
-      method:'POST', headers:{ 'Content-Type':'application/json', [csrfHeader]: csrfToken }, body: JSON.stringify({ content })
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {}) },
+      body: JSON.stringify({ content })
     });
-    if (res.ok) displayPrivateMessage(await res.json(), true);
+    // Không display ở đây; chờ onPrivateMessageReceived đẩy về để hiển thị
+    if (!res.ok) console.error('Send private failed:', await res.text());
   } catch (e) { console.error('Error sending private message:', e); }
 }
+
 async function sendGroupMessage(content) {
   try {
     const res = await fetch(`/api/groups/${currentChat.id}/send`, {
-      method:'POST', headers:{ 'Content-Type':'application/json', [csrfHeader]: csrfToken }, body: JSON.stringify({ content })
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {}) },
+      body: JSON.stringify({ content })
     });
-    if (res.ok) displayGroupMessage(await res.json(), true);
+    // Không display ở đây; chờ onGroupMessageReceived
+    if (!res.ok) console.error('Send group failed:', await res.text());
   } catch (e) { console.error('Error sending group message:', e); }
 }
 
@@ -432,7 +456,12 @@ function displayMessage(message, autoScroll = true) {
   const div = document.createElement('div');
   div.className = 'flex items-start space-x-3 message-bubble';
   const isMe = message.sender === username;
-  const displayNameBase = message.fullName || message.sender;
+  const displayNameBase =
+      message.nickname
+      || message.fullName || message.full_name
+      || message.senderFullName || message.sender_name
+      || message.senderUsername || message.sender
+      || 'Ẩn danh';
   const initials = getInitials(displayNameBase);
   const gradient = pickGradient(simpleHash(message.sender||''));
   const time = message.timestamp || new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
@@ -466,10 +495,19 @@ function displayMessage(message, autoScroll = true) {
 }
 
 function resolveDisplayNameFromMap(sender) {
-  // Ưu tiên nickname nếu có
-  const sid = sender?.id ?? sender?.userId;
-  const nick = sid != null ? memberNickMap.get(Number(sid)) : null;
-  return nick || sender?.fullName || sender?.username;
+  if (!sender) return 'Ẩn danh';
+
+  const idKey = sender.id ?? sender.userId ?? sender.senderId;
+  const usr   = sender.username ?? sender.senderUsername;
+  const full  = sender.fullName ?? sender.full_name ?? sender.name;
+
+  // 1) Biệt danh (tra theo id, rồi fallback theo username)
+  const nick =
+      (idKey != null ? memberNickMap.get(`id:${String(idKey)}`) : null) ||
+      (usr ? memberNickMap.get(`u:${usr}`) : null);
+
+  // 2) full_name   3) username
+  return nick || full || usr || 'Ẩn danh';
 }
 
 function displayPrivateMessage(message, autoScroll = true) {
@@ -1059,12 +1097,18 @@ const saveMemberNicknamesBtn = document.getElementById('saveMemberNicknamesBtn')
 
 function rebuildMemberNickMap(list){
   memberNickMap = new Map();
-  (list||[]).forEach(m=>{
-    const id = Number(m.userId ?? m.id);
-    const nick = (m.nickname||'').trim();
-    if (id && nick) memberNickMap.set(id, nick);
+  (list || []).forEach(m => {
+    const nick = (m.nickname || '').trim();
+    if (!nick) return;
+
+    const idKey  = m.userId ?? m.id;     // có thể là số hoặc UUID
+    const usrKey = m.username;           // fallback khi message không có id
+
+    if (idKey != null) memberNickMap.set(`id:${String(idKey)}`, nick);
+    if (usrKey)        memberNickMap.set(`u:${usrKey}`,        nick);
   });
 }
+
 
 function renderMemberNicknameRow(member) {
   const initials = getInitials(member.fullName || member.username || '');
@@ -1082,8 +1126,12 @@ function renderMemberNicknameRow(member) {
         <div class="chat-name font-medium text-sm text-gray-900 dark:text-white truncate">${member.fullName || member.username || ''}</div>
         ${member.username ? `<div class="text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-200">@${member.username}</div>` : ''}
       </div>
-      <input data-user-id="${id}" type="text" placeholder="Biệt danh cho người này…"
-             value="${member.nickname ? member.nickname.replace(/"/g,'&quot;') : ''}"
+        <input
+          data-user-id="${id ?? ''}"
+          data-username="${member.username || ''}"
+          type="text"
+          placeholder="Biệt danh cho người này…"
+          value="${member.nickname ? member.nickname.replace(/"/g,'&quot;') : ''}"
              class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-sm">
     </div>
   `;
@@ -1108,6 +1156,17 @@ async function loadGroupMemberNicknames(groupId) {
     memberNicknamesSection.classList.add('hidden');
     showErrorMessage('Không tải được danh sách thành viên.');
   }
+}
+function applyLocalNicknameEditsToMap() {
+  if (!memberNicknameList) return;
+  memberNicknameList.querySelectorAll('input[data-user-id]').forEach(i => {
+    const id  = i.getAttribute('data-user-id');
+    const usr = i.getAttribute('data-username');
+    const nick = (i.value || '').trim();
+    if (!nick) return;
+    if (id)  memberNickMap.set(`id:${String(id)}`, nick);
+    if (usr) memberNickMap.set(`u:${usr}`,       nick);
+  });
 }
 
 // Load partner for private
@@ -1145,6 +1204,7 @@ async function saveMemberNicknames(){
       body: JSON.stringify(payload)
     });
     if (!res.ok) throw new Error(await res.text());
+    applyLocalNicknameEditsToMap();
     showSuccessMessage('Đã lưu biệt danh thành viên.');
 
     // Reload map + history để áp dụng ngay
@@ -1214,3 +1274,5 @@ async function showFriendRequestsModal() {
 
   frLoading = false;
 }
+
+

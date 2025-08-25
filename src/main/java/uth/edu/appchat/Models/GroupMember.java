@@ -59,4 +59,84 @@ public class GroupMember {
 
     public LocalDateTime getClearedAt() { return clearedAt; }
     public void setClearedAt(LocalDateTime t) { this.clearedAt = t; }
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public GroupChat getGroupChat() {
+        return groupChat;
+    }
+
+    public void setGroupChat(GroupChat groupChat) {
+        this.groupChat = groupChat;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
+    public GroupRole getRole() {
+        return role;
+    }
+
+    public void setRole(GroupRole role) {
+        this.role = role;
+    }
+
+    public LocalDateTime getJoinedAt() {
+        return joinedAt;
+    }
+
+    public void setJoinedAt(LocalDateTime joinedAt) {
+        this.joinedAt = joinedAt;
+    }
+
+    public LocalDateTime getLeftAt() {
+        return leftAt;
+    }
+
+    public void setLeftAt(LocalDateTime leftAt) {
+        this.leftAt = leftAt;
+    }
+
+    public Boolean getActive() {
+        return isActive;
+    }
+
+    public void setActive(Boolean active) {
+        isActive = active;
+    }
+
+    public String getNickname() {
+        return nickname;
+    }
+
+    public void setNickname(String nickname) {
+        this.nickname = nickname;
+    }
+
+    public Long getNicknameUpdatedBy() {
+        return nicknameUpdatedBy;
+    }
+
+    public void setNicknameUpdatedBy(Long nicknameUpdatedBy) {
+        this.nicknameUpdatedBy = nicknameUpdatedBy;
+    }
+
+    public LocalDateTime getNicknameUpdatedAt() {
+        return nicknameUpdatedAt;
+    }
+
+    public void setNicknameUpdatedAt(LocalDateTime nicknameUpdatedAt) {
+        this.nicknameUpdatedAt = nicknameUpdatedAt;
+    }
 }

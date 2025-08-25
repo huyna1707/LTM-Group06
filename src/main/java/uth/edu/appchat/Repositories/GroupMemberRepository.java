@@ -39,4 +39,12 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
 
     // Tìm 1 thành viên trong nhóm để cập nhật nickname
     Optional<GroupMember> findByGroupChatIdAndUserId(Long groupId, Long userId);
+    // Trả về danh sách username của các thành viên đang active trong group
+    @Query("""
+       select gm.user.username
+       from GroupMember gm
+       where gm.groupChat.id = :groupId
+         and gm.isActive = true
+       """)
+    List<String> findActiveUsernames(@Param("groupId") Long groupId);
 }
