@@ -8,7 +8,12 @@ const $ = (sel) => document.querySelector(sel);
 // CSRF
 const csrfToken = document.querySelector("meta[name='_csrf']")?.content;
 const csrfHeader = document.querySelector("meta[name='_csrf_header']")?.content;
+const DEFAULT_AVATAR_URL = '/images/defaultAvt.jpg';
+const avatarCache = new Map(); // username => url
 
+const editMailInput  = $("#editMail");
+const editPhoneInput = $("#editPhone");
+let   currentProfile = null; // nhớ profile mới nhất lấy từ server
 // Main elements
 const usernamePage = $('#username-page');
 const chatPage = $('#chat-page');
@@ -110,7 +115,6 @@ function onConnected() {
   // Hủy subs cũ (nếu có) để không bị đăng ký chồng
   Object.values(subs).forEach(s => s?.unsubscribe?.());
   subs = {};
-  3
   stompClient.subscribe('/topic/public', onPublicMessageReceived);
   stompClient.subscribe('/topic/user-status', onUserStatusChanged);
   // stompClient.subscribe(`/user/${username}/private`, onPrivateMessageReceived);
@@ -122,8 +126,9 @@ function onConnected() {
   loadInitialData();
   loadPendingFriendRequests();
   stompClient.send('/app/chat.join', {}, JSON.stringify({ sender: username, type: 'JOIN' }));
-
+  refreshSidebar();
   switchToPublicChat();
+  loadProfileFromDatabase();
 }
 
 function onError(error) {
@@ -140,50 +145,42 @@ function onPublicMessageReceived(payload) {
 }
 function onPrivateMessageReceived(payload) {
   const message = JSON.parse(payload.body);
-  // nếu đang ở private chat này và đã bật chặn -> bỏ qua hiển thị
-  if (currentChat?.type === 'private' && blockToggle?.checked) {
-    return;
+
+  if (currentChat?.type === 'private' && blockToggle?.checked) return;
+
+  const msgChatId = message.chatId ?? message.privateChatId ?? message.chat?.id;
+  if (currentChat?.type === 'private' && currentChat?.id == msgChatId) {
+    try { displayPrivateMessage(message, true); } catch (e) { console.error(e); }
   }
-  if (currentChat?.type === 'private' && currentChat?.id === (message.chatId ?? message.privateChatId)) {
-    displayPrivateMessage(message, true);
-  }
-  updateChatListWithNewMessage(message);
+  updateChatListWithNewMessage();
 }
 function onGroupMessageReceived(payload) {
   const message = JSON.parse(payload.body);
-  if (currentChat?.type === 'group' && currentChat?.id === message.groupId) {
-    displayGroupMessage(message, true);
+  const msgGroupId = message.groupId ?? message.chatId ?? message.group?.id;
+  if (currentChat?.type === 'group' && currentChat?.id == msgGroupId) {
+    try { displayGroupMessage(message, true); } catch (e) { console.error(e); }
   }
-  updateChatListWithNewMessage(message);
+  updateChatListWithNewMessage();
 }
+
 function onFriendRequestReceived(payload) {
   const notification = JSON.parse(payload.body);
   showFriendRequestNotification(notification);
-  loadFriendsList();
+  scheduleSidebarRefresh();
 }
-function onUserStatusChanged() { loadFriendsList(); }
+function onUserStatusChanged() { scheduleSidebarRefresh(); }
 
 /* ========================================================
    DATA LOADING
 ======================================================== */
 async function loadInitialData() {
-  try { await Promise.all([ loadFriendsList(), loadGroupsList(), loadChatHistory() ]); }
+  try { await loadChatHistory(); }
   catch (e) { console.error('Error loading initial data:', e); }
 }
 
-async function loadFriendsList() {
-  try {
-    const res = await fetch('/api/friends/list', { headers: { [csrfHeader]: csrfToken } });
-    if (res.ok) displayFriendsList(await res.json());
-  } catch (e) { console.error('Error loading friends:', e); }
-}
 
-async function loadGroupsList() {
-  try {
-    const res = await fetch('/api/groups/my-groups', { headers: { [csrfHeader]: csrfToken } });
-    if (res.ok) displayGroupsList(await res.json());
-  } catch (e) { console.error('Error loading groups:', e); }
-}
+
+
 
 async function loadChatHistory() {
   if (currentChat?.type === 'public') await loadPublicChatHistory();
@@ -230,24 +227,8 @@ async function loadGroupChatHistory(groupId) {
 /* ========================================================
    FRIENDS / GROUP LIST RENDER
 ======================================================== */
-function displayFriendsList(friends) {
-  const chatList = $("#chatList");
-  if (!chatList) return;
-  chatList.innerHTML = '';
-  addPublicChannelToList();
-  if (friends.length > 0) {
-    const friendsSection = createSection("👥 Bạn bè", friends.length);
-    chatList.appendChild(friendsSection);
-    friends.forEach(f => chatList.appendChild(createFriendItem(f)));
-  }
-}
-function displayGroupsList(groups) {
-  const chatList = $("#chatList");
-  if (!chatList || groups.length === 0) return;
-  const groupsSection = createSection("🏠 Nhóm chat", groups.length);
-  chatList.appendChild(groupsSection);
-  groups.forEach(g => chatList.appendChild(createGroupItem(g)));
-}
+
+
 
 function addPublicChannelToList() {
   const chatList = $("#chatList");
@@ -277,14 +258,20 @@ function createFriendItem(friend) {
   const displayName = (friend.fullName && friend.fullName.trim()) ? friend.fullName : friend.username;
   const initials = getInitials(displayName);
   const gradient = pickGradient(simpleHash(friend.username||''));
+  const url = extractAvatarUrl(friend) || (friend.username && avatarCache.get(friend.username)) || null;
+
   const w = document.createElement('div');
   w.className = "chat-item p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors";
   w.onclick = () => switchToPrivateChat(friend);
+
+  // 👉 thêm data-username để tìm lại node khi cần
+  w.setAttribute('data-username', friend.username || '');
+
   w.innerHTML = `
     <div class="flex items-center space-x-3">
-      <div class="relative">
-        <div class="w-10 h-10 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center"><span class="text-white text-sm font-medium">${initials}</span></div>
-        <div class="absolute -bottom-1 -right-1 w-3 h-3 ${friend.status==='ONLINE'?'bg-green-500':'bg-gray-400'} rounded-full border-2 border-white dark:border-gray-900"></div>
+      <!-- 👉 holder để thay avatar in-place -->
+      <div class="relative" data-avatar-for="${friend.username || ''}">
+        ${renderAvatar(url, initials, gradient, 10)}
       </div>
       <div class="flex-1 min-w-0">
         <h4 class="chat-name font-medium text-gray-900 dark:text-white truncate text-sm">${displayName}</h4>
@@ -293,6 +280,17 @@ function createFriendItem(friend) {
     </div>`;
   return w;
 }
+
+function patchSidebarAvatar(username, url, displayName) {
+  const esc = window.CSS?.escape ? CSS.escape(username) : String(username).replace(/"/g, '\\"');
+  const holder = document.querySelector(`[data-avatar-for="${esc}"]`);
+  if (!holder) return;
+  const initials = getInitials(displayName || username);
+  const gradient = pickGradient(simpleHash(username || ''));
+  holder.innerHTML = renderAvatar(url, initials, gradient, 10);
+}
+
+
 function createGroupItem(group) {
   const initials = getInitials(group.name);
   const gradient = pickGradient(simpleHash(group.name||''));
@@ -456,14 +454,19 @@ function displayMessage(message, autoScroll = true) {
   const div = document.createElement('div');
   div.className = 'flex items-start space-x-3 message-bubble';
   const isMe = message.sender === username;
+
   const displayNameBase =
       message.nickname
       || message.fullName || message.full_name
       || message.senderFullName || message.sender_name
       || message.senderUsername || message.sender
       || 'Ẩn danh';
+
+  // avatar
   const initials = getInitials(displayNameBase);
   const gradient = pickGradient(simpleHash(message.sender||''));
+  const avatarUrl = extractAvatarUrl(message) || (message.senderUsername && avatarCache.get(message.senderUsername)) || null;
+
   const time = message.timestamp || new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
 
   if (message.type === 'JOIN') {
@@ -479,11 +482,12 @@ function displayMessage(message, autoScroll = true) {
         <p class="text-white">${message.content}</p>
         <div class="flex items-center justify-end mt-1"><span class="text-xs text-purple-100">${time}</span></div>
       </div>
-      <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>`;
+      ${renderAvatar(avatarUrl, initials, gradient, 8)}
+    `;
   } else {
     div.classList.add('items-start');
     div.innerHTML = `
-      <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>
+      ${renderAvatar(avatarUrl, initials, gradient, 8)}
       <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md">
         <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">${displayNameBase}</div>
         <p class="text-gray-800 dark:text-gray-200">${message.content}</p>
@@ -494,31 +498,58 @@ function displayMessage(message, autoScroll = true) {
   if (autoScroll) scrollToBottom();
 }
 
-function resolveDisplayNameFromMap(sender) {
-  if (!sender) return 'Ẩn danh';
+function normalizeSender(message) {
+  const s = message.sender || {};
+  return {
+    id:
+        s.id ?? s.userId ??
+        message.senderId ?? message.userId ?? message.fromUserId ?? null,
+    username:
+        s.username ??
+        message.senderUsername ?? message.username ?? message.fromUsername ?? null,
+    fullName:
+        s.fullName ?? s.full_name ??
+        message.senderFullName ?? message.sender_name ??
+        message.fullName ?? message.name ?? null,
+    nickname: s.nickname ?? message.nickname ?? null,
+    avatarUrl:
+        s.avatarUrl ?? s.avatar_url ??
+        message.avatarUrl ?? message.avatar_url ?? null
+  };
+}
 
-  const idKey = sender.id ?? sender.userId ?? sender.senderId;
-  const usr   = sender.username ?? sender.senderUsername;
-  const full  = sender.fullName ?? sender.full_name ?? sender.name;
 
-  // 1) Biệt danh (tra theo id, rồi fallback theo username)
-  const nick =
+function resolveDisplayNameFromMap(senderLike) {
+  if (!senderLike) return 'Ẩn danh';
+  const idKey = senderLike.id ?? senderLike.userId ?? null;
+  const usr   = senderLike.username ?? null;
+  const full  = senderLike.fullName ?? senderLike.full_name ?? senderLike.name ?? null;
+  const nickPayload = senderLike.nickname ?? null;
+
+  const nickFromMap =
       (idKey != null ? memberNickMap.get(`id:${String(idKey)}`) : null) ||
       (usr ? memberNickMap.get(`u:${usr}`) : null);
 
-  // 2) full_name   3) username
-  return nick || full || usr || 'Ẩn danh';
+  // Thứ tự ưu tiên: biệt danh → full_name → username
+  return nickFromMap || nickPayload || full || usr || 'Ẩn danh';
 }
+
 
 function displayPrivateMessage(message, autoScroll = true) {
   const div = document.createElement('div');
   div.className = 'flex items-start space-x-3 message-bubble';
-  const isMe = message.sender.username === username;
 
-  const displayName = resolveDisplayNameFromMap(message.sender);
+  const s = normalizeSender(message);
+  const isMe = s.username === username;
+
+  const displayName = resolveDisplayNameFromMap(s);
   const initials = getInitials(displayName);
-  const gradient = pickGradient(simpleHash(message.sender.username||''));
-  const time = new Date(message.timestamp).toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
+  const gradient = pickGradient(simpleHash(s.username || String(s.id || '')));
+  const avatarUrl = s.avatarUrl || (s.username && avatarCache.get(s.username)) || null;
+
+  const t = message.timestamp ? new Date(message.timestamp) : null;
+  const time = (t && !isNaN(t)) ? t.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})
+      : new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
 
   if (isMe) {
     div.classList.add('justify-end');
@@ -527,16 +558,18 @@ function displayPrivateMessage(message, autoScroll = true) {
         <p class="text-white">${message.content}</p>
         <div class="flex items-center justify-end mt-1"><span class="text-xs text-purple-100">${time}</span></div>
       </div>
-      <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>`;
+      ${renderAvatar(avatarUrl, initials, gradient, 8)}
+    `;
   } else {
     div.classList.add('items-start');
     div.innerHTML = `
-      <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>
+      ${renderAvatar(avatarUrl, initials, gradient, 8)}
       <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md">
         <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">${displayName}</div>
         <p class="text-gray-800 dark:text-gray-200">${message.content}</p>
         <div class="flex items-center justify-end mt-1"><span class="text-xs text-gray-500 dark:text-gray-400">${time}</span></div>
-      </div>`;
+      </div>
+    `;
   }
   chatMessages?.appendChild(div);
   if (autoScroll) scrollToBottom();
@@ -545,12 +578,18 @@ function displayPrivateMessage(message, autoScroll = true) {
 function displayGroupMessage(message, autoScroll = true) {
   const div = document.createElement('div');
   div.className = 'flex items-start space-x-3 message-bubble';
-  const isMe = message.sender.username === username;
 
-  const displayName = resolveDisplayNameFromMap(message.sender);
+  const s = normalizeSender(message);
+  const isMe = s.username === username;
+
+  const displayName = resolveDisplayNameFromMap(s);
   const initials = getInitials(displayName);
-  const gradient = pickGradient(simpleHash(message.sender.username || ''));
-  const time = new Date(message.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  const gradient = pickGradient(simpleHash(s.username || String(s.id || '')));
+  const avatarUrl = s.avatarUrl || (s.username && avatarCache.get(s.username)) || null;
+
+  const t = message.timestamp ? new Date(message.timestamp) : null;
+  const time = (t && !isNaN(t)) ? t.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})
+      : new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
 
   if (isMe) {
     div.classList.add('justify-end');
@@ -559,16 +598,18 @@ function displayGroupMessage(message, autoScroll = true) {
         <p class="text-white">${message.content}</p>
         <div class="flex items-center justify-end mt-1"><span class="text-xs text-purple-100">${time}</span></div>
       </div>
-      <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>`;
+      ${renderAvatar(avatarUrl, initials, gradient, 8)}
+    `;
   } else {
     div.classList.add('items-start');
     div.innerHTML = `
-      <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>
+      ${renderAvatar(avatarUrl, initials, gradient, 8)}
       <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md break-words">
         <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">${displayName}</div>
         <p class="text-gray-800 dark:text-gray-200">${message.content}</p>
         <div class="flex items-center justify-end mt-1"><span class="text-xs text-gray-500 dark:text-gray-400">${time}</span></div>
-      </div>`;
+      </div>
+    `;
   }
   chatMessages?.appendChild(div);
   if (autoScroll) scrollToBottom();
@@ -622,12 +663,12 @@ function createFriendRequestItem(request) {
 function showFriendRequestNotification(n) {
   if (n.type === 'FRIEND_REQUEST_RECEIVED') {
     showNotificationToast(`${n.fromUser} muốn kết bạn với bạn`, 'info', () => showFriendRequestsModal());
-    loadPendingFriendRequests(); loadFriendsList();
+    loadPendingFriendRequests(); scheduleSidebarRefresh();
   } else if (n.type === 'FRIEND_REQUEST_ACCEPTED') {
     showNotificationToast(`${n.fromUser} đã chấp nhận lời mời kết bạn`, 'success');
-    loadFriendsList();
+    scheduleSidebarRefresh();
   } else if (n.type === 'FRIEND_LIST_UPDATE') {
-    loadFriendsList(); loadPendingFriendRequests();
+    scheduleSidebarRefresh(); loadPendingFriendRequests();
   }
 }
 async function acceptFriendRequest(userId) {
@@ -649,7 +690,7 @@ async function acceptFriendRequest(userId) {
     }
 
     showSuccessMessage('Đã chấp nhận lời mời kết bạn');
-    loadFriendsList();
+    scheduleSidebarRefresh();
     loadPendingFriendRequests(); // cập nhật badge
   } catch (e) {
     showErrorMessage('Có lỗi xảy ra');
@@ -693,7 +734,7 @@ function showNotificationToast(message, type='info', onClick=null) {
 function scrollToBottom(){ if (chatMessages) chatMessages.scrollTop = chatMessages.scrollHeight; }
 function showErrorMessage(m){ const d=document.createElement('div'); d.className='flex justify-center my-4'; d.innerHTML=`<div class="glass-effect px-6 py-3 rounded-full text-sm text-red-600 dark:text-red-300">${m}</div>`; chatMessages?.appendChild(d); scrollToBottom(); }
 function showSuccessMessage(m){ const d=document.createElement('div'); d.className='flex justify-center my-4'; d.innerHTML=`<div class="glass-effect px-6 py-3 rounded-full text-sm text-green-600 dark:text-green-300">${m}</div>`; chatMessages?.appendChild(d); scrollToBottom(); }
-function updateChatListWithNewMessage(){ loadFriendsList(); loadGroupsList(); }
+function updateChatListWithNewMessage(){ scheduleSidebarRefresh();}
 function handleEnterKey(e){ if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(e); } }
 
 /* ========================================================
@@ -908,9 +949,8 @@ document.addEventListener('click', (e)=>{ if (!emojiPicker || !emojiToggleBtn) r
 window.addEventListener('keydown',(e)=>{ if (e.key==='Escape') closeEmojiPicker(); });
 renderEmojiGrid('recent');
 
-/* ========================================================
-   PROFILE / AVATAR (localStorage)
-======================================================== */
+// --- Profile / Avatar localStorage ---
+
 const profileNameEl    = $("#profileName");
 const profileStatusEl  = $("#profileStatus");
 const editProfileBtn   = $("#editProfileBtn");
@@ -934,15 +974,277 @@ const editAvatarFallback    = $("#editAvatarFallback");
 const editAvatarBtn         = $("#editAvatarBtn");
 const editAvatarFile        = $("#editAvatarFile");
 const removeAvatarBtn       = $("#removeAvatarBtn");
-function applyAvatar(dataUrl){ if (profileAvatarImg && profileAvatarFallback){ if (dataUrl){ profileAvatarImg.src=dataUrl; profileAvatarImg.style.display='block'; profileAvatarImg.classList.add('w-12','h-12'); profileAvatarFallback.style.display='none'; } else { profileAvatarImg.removeAttribute('src'); profileAvatarImg.style.display='none'; profileAvatarFallback.style.display='flex'; } } if (editAvatarPreview && editAvatarFallback){ if (dataUrl){ editAvatarPreview.src=dataUrl; editAvatarPreview.style.display='block'; editAvatarFallback.style.display='none'; } else { editAvatarPreview.removeAttribute('src'); editAvatarPreview.style.display='none'; editAvatarFallback.style.display='flex'; } } }
-function fileToDataURL(file){ return new Promise((resolve,reject)=>{ const reader=new FileReader(); reader.onload=()=>resolve(reader.result); reader.onerror=reject; reader.readAsDataURL(file); }); }
-(function initAvatarFromStorage(){ const saved=localStorage.getItem('profileAvatar')||''; applyAvatar(saved||null); })();
-editProfileBtn?.addEventListener('click', ()=>{ const currentName=localStorage.getItem('profileName')||(profileNameEl?.textContent?.trim()||'Bạn'); const currentKey=localStorage.getItem('profileStatusKey')||labelToKey(profileStatusEl?.textContent?.trim()||''); if (editNameInput) editNameInput.value=currentName; if (editStatusSelect) editStatusSelect.value=STATUS_KEYS.includes(currentKey)?currentKey:'active'; applyAvatar(localStorage.getItem('profileAvatar')||null); if (editPersistChk){ editPersistChk.checked = Boolean(localStorage.getItem('profileName')||localStorage.getItem('profileStatusKey')||localStorage.getItem('profileStatus')); }
-  const modal = document.getElementById('editProfileModal'); modal?.classList.remove('hidden'); });
-$("#saveProfileChanges")?.addEventListener('click', ()=>{ const newName=(editNameInput?.value.trim()||'Bạn'); const key=editStatusSelect?.value||'active'; const safeKey=STATUS_KEYS.includes(key)?key:'active'; if (profileNameEl) profileNameEl.textContent=newName; updateStatusUI(safeKey); if (editPersistChk?.checked){ localStorage.setItem('profileName', newName); localStorage.setItem('profileStatusKey', safeKey); localStorage.setItem('profileStatus', STATUS_MAP[safeKey].label); } else { localStorage.removeItem('profileName'); localStorage.removeItem('profileStatusKey'); localStorage.removeItem('profileStatus'); } document.getElementById('editProfileModal')?.classList.add('hidden'); });
-editAvatarBtn?.addEventListener('click', ()=> editAvatarFile?.click());
-editAvatarFile?.addEventListener('change', async (e)=>{ const f=e.target.files?.[0]; if (!f) return; if (f.size > 2*1200*1080){ alert('Ảnh quá lớn. Vui lòng chọn ảnh nhỏ hơn.'); editAvatarFile.value=''; return; } try{ const dataUrl=await fileToDataURL(f); localStorage.setItem('profileAvatar', dataUrl); applyAvatar(dataUrl); } catch(err){ console.error(err); alert('Không đọc được file ảnh.'); } });
-removeAvatarBtn?.addEventListener('click', ()=>{ localStorage.removeItem('profileAvatar'); if (editAvatarFile) editAvatarFile.value=''; applyAvatar(null); });
+
+editAvatarBtn?.addEventListener('click', () => {
+  // reset để chọn lại cùng 1 file vẫn nhận change
+  if (editAvatarFile) editAvatarFile.value = '';
+  editAvatarFile?.click();
+});
+
+removeAvatarBtn?.addEventListener('click', async () => {
+  try {
+    const res = await fetch('/api/users/avatar', {
+      method: 'DELETE',
+      headers: { ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {}) }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+
+    const url = data?.url || DEFAULT_AVATAR_URL;
+    localStorage.setItem('profileAvatarServerUrl', url);
+    applyAvatar(url);
+
+    showSuccessMessage('Đã xóa ảnh đại diện.');
+  } catch (e) {
+    console.error(e);
+    showErrorMessage('Không xóa được ảnh.');
+  }
+});
+
+// 👉 Lắng nghe chọn file, đọc thành dataURL và preview + lưu
+editAvatarFile?.addEventListener('change', async (e) => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+
+  const MAX_BYTES = 2 * 1024 * 1024; // 2MB
+  if (f.size > MAX_BYTES) {
+    showErrorMessage('Ảnh quá lớn (> 2MB). Vui lòng chọn ảnh nhỏ hơn.');
+    e.target.value = '';
+    return;
+  }
+  if (!/^image\/(png|jpe?g|gif|webp|bmp|svg\+xml)$/i.test(f.type)) {
+    showErrorMessage('Định dạng ảnh không hợp lệ.');
+    e.target.value = '';
+    return;
+  }
+
+  try {
+    // Upload multipart/form-data
+    const fd = new FormData();
+    fd.append('file', f);
+
+    const res = await fetch('/api/users/avatar', {
+      method: 'POST',
+      headers: { ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {}) },
+      body: fd
+    });
+
+    if (!res.ok) {
+      const msg = await res.text();
+      showErrorMessage(msg || 'Upload ảnh thất bại.');
+      return;
+    }
+
+    const { url } = await res.json();
+    if (!url) {
+      showErrorMessage('Server không trả về URL ảnh.');
+      return;
+    }
+
+    // Lưu URL server để dùng khi “Lưu hồ sơ”
+    localStorage.setItem('profileAvatarServerUrl', url);
+
+    // Preview luôn bằng URL server
+    applyAvatar(url);
+    showSuccessMessage('Đã tải ảnh lên.');
+  } catch (err) {
+    console.error(err);
+    showErrorMessage('Không upload được ảnh.');
+  }
+});
+
+
+
+function applyAvatar(url) {
+  const finalUrl = (url && url.trim() !== '') ? url : DEFAULT_AVATAR_URL;
+
+  if (profileAvatarImg && profileAvatarFallback) {
+    profileAvatarImg.src = finalUrl;
+    profileAvatarImg.style.display = 'block';
+    profileAvatarFallback.style.display = 'none';
+  }
+
+  if (editAvatarPreview && editAvatarFallback) {
+    editAvatarPreview.src = finalUrl;
+    editAvatarPreview.style.display = 'block';
+    editAvatarFallback.style.display = 'none';
+  }
+}
+
+// (A) Khởi tạo từ localStorage
+(function initAvatarFromStorage(){
+  const saved =
+      localStorage.getItem('profileAvatarServerUrl')  // ưu tiên URL từ server
+      || localStorage.getItem('profileAvatar')        // (cũ) nếu còn giữ dataURL
+      || '';
+  applyAvatar(saved || null);
+})();
+
+// (B) Khi mở modal chỉnh sửa
+editProfileBtn?.addEventListener('click', ()=> {
+  const currentName = localStorage.getItem('profileName') || (profileNameEl?.textContent?.trim() || 'Bạn');
+  const currentKey  = localStorage.getItem('profileStatusKey') || labelToKey(profileStatusEl?.textContent?.trim() || '');
+  if (editNameInput)    editNameInput.value = currentName;
+  if (editStatusSelect) editStatusSelect.value = STATUS_KEYS.includes(currentKey) ? currentKey : 'active';
+
+  // Avatar preview
+  const storedAvatar = localStorage.getItem('profileAvatarServerUrl') || localStorage.getItem('profileAvatar');
+  applyAvatar(storedAvatar || null);
+
+  // 👇 Prefill email/phone từ profile đang có
+  const p = currentProfile || {};
+  if (editMailInput)  editMailInput.value  = p.email ?? '';
+  if (editPhoneInput) editPhoneInput.value = p.phone ?? '';
+
+  document.getElementById('editProfileModal')?.classList.remove('hidden');
+});
+
+
+
+document.getElementById('saveProfileChanges')?.addEventListener('click', async () => {
+  const newName  = (editNameInput?.value || 'Bạn').trim();
+  const key      = editStatusSelect?.value || 'active';
+  const safeKey  = STATUS_KEYS.includes(key) ? key : 'active';
+  const newEmail = (editMailInput?.value  || '').trim();
+  const newPhone = (editPhoneInput?.value || '').trim();
+
+  const payload = {
+    fullName: newName,
+    status:   safeKey,
+    email:    newEmail || null,   // rỗng => xóa ở server
+    phone:    newPhone || null    // rỗng => xóa ở server
+  };
+
+  const avatarUrlFromLS = localStorage.getItem('profileAvatarServerUrl');
+  if (avatarUrlFromLS && avatarUrlFromLS.trim() !== '') {
+    payload.avatarUrl = avatarUrlFromLS;
+  }
+
+  try {
+    const response = await fetch('/api/users/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', [csrfHeader]: csrfToken },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data?.success === false) {
+      const msg = data?.message || data?.error || 'Lỗi không xác định';
+      showErrorMessage('Không thể cập nhật hồ sơ: ' + msg);
+      return;
+    }
+
+    // Đồng bộ lại UI từ server (tránh sai khác sau khi chuẩn hóa email/phone)
+    const u = data?.user || {};
+    if (profileNameEl) profileNameEl.textContent = u.fullName || newName;
+    updateStatusUI(safeKey);
+    if (typeof u.avatarUrl === 'string' && u.avatarUrl.trim() !== '') {
+      localStorage.setItem('profileAvatarServerUrl', u.avatarUrl);
+      applyAvatar(u.avatarUrl);
+    }
+    // cập nhật lại các input trong modal (đã lưu/chuẩn hoá)
+    if (editMailInput)  editMailInput.value  = u.email ?? '';
+    if (editPhoneInput) editPhoneInput.value = u.phone ?? '';
+
+    if (editPersistChk?.checked) {
+      localStorage.setItem('profileName', profileNameEl?.textContent || newName);
+      localStorage.setItem('profileStatusKey', safeKey);
+      localStorage.setItem('profileStatus', STATUS_MAP[safeKey].label);
+    } else {
+      localStorage.removeItem('profileName');
+      localStorage.removeItem('profileStatusKey');
+      localStorage.removeItem('profileStatus');
+    }
+
+    showSuccessMessage('Cập nhật hồ sơ thành công!');
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    showErrorMessage('Lỗi kết nối: Không thể cập nhật hồ sơ');
+  }
+
+  document.getElementById('editProfileModal')?.classList.add('hidden');
+});
+
+// === Load profile từ Database (GET /api/users/profile)
+// === Load profile từ Database (GET /api/users/profile)
+async function loadProfileFromDatabase() {
+  try {
+    const response = await fetch('/api/users/profile', {
+      method: 'GET',
+      headers: { ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {}) }
+    });
+    if (!response.ok) return;
+
+    const profile = await response.json();
+    currentProfile = profile; // 👈 lưu lại
+
+    // Tên hiển thị
+    if (profileNameEl && profile.fullName) {
+      profileNameEl.textContent = profile.fullName;
+      if (!localStorage.getItem('profileName')) {
+        localStorage.setItem('profileName', profile.fullName);
+      }
+    }
+
+    // Trạng thái
+    if (profile.status) {
+      updateStatusUI(profile.status);
+      if (!localStorage.getItem('profileStatusKey')) {
+        localStorage.setItem('profileStatusKey', profile.status);
+        localStorage.setItem('profileStatus', STATUS_MAP[profile.status]?.label || 'Đang hoạt động');
+      }
+    }
+
+    // Avatar
+    const finalAvatarUrl =
+        (profile.avatarUrl && profile.avatarUrl.trim() !== '')
+            ? profile.avatarUrl
+            : DEFAULT_AVATAR_URL;
+
+    localStorage.setItem('profileAvatarServerUrl', finalAvatarUrl);
+    applyAvatar(finalAvatarUrl);
+
+    if (profile.username) {
+      avatarCache.set(profile.username, finalAvatarUrl);
+    }
+
+    // 👇 NẠP SẴN email/phone vào các ô trong modal
+    if (editMailInput)  editMailInput.value  = profile.email  ?? '';
+    if (editPhoneInput) editPhoneInput.value = profile.phone  ?? '';
+
+  } catch (error) {
+    console.error('Error loading profile from database:', error);
+  }
+}
+
+
+
+/* =========================== AVATAR HELPERS =========================== */
+
+
+function extractAvatarUrl(obj) {
+  // thử lấy từ nhiều field khác nhau
+  return obj?.avatarUrl || obj?.avatar_url ||
+      obj?.sender?.avatarUrl || obj?.sender?.avatar_url || null;
+}
+
+/** Trả về HTML ảnh + fallback (ẩn) — onerror sẽ hiện fallback */
+function renderAvatar(avatarUrl, initials, gradient, sizeTailwind = 10) {
+  const sizeClass = `w-${sizeTailwind} h-${sizeTailwind}`;
+  const img = avatarUrl ? `
+    <img src="${avatarUrl}"
+         alt="${initials}"
+         class="${sizeClass} rounded-full object-cover flex-shrink-0"
+         onerror="this.style.display='none'; this.nextElementSibling?.classList.remove('hidden');">`
+      : '';
+
+  const fallback = `
+    <div class="${sizeClass} bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0 ${avatarUrl ? 'hidden' : ''}">
+      <span class="text-white text-sm font-bold">${initials}</span>
+    </div>`;
+
+  return img + fallback;
+}
 
 /* ========================================================
    DOM READY
@@ -953,6 +1255,7 @@ document.addEventListener('DOMContentLoaded', function(){
     username = usernameInput.value.trim();
     console.log('🔄 Auto-connecting WebSocket for user:', username);
     connect();
+    loadProfileFromDatabase();
   }
 
   $('#connectForm')?.addEventListener('submit', connect);
@@ -961,7 +1264,6 @@ document.addEventListener('DOMContentLoaded', function(){
 
   // Bạn đã có showAddFriendDialog/showCreateGroupDialog ở nơi khác
   $('#addFriendBtn')?.addEventListener('click', showAddFriendDialog);
-  $('#createGroupBtn')?.addEventListener('click', showCreateGroupDialog);
 
   const basicSearchInput = (!document.getElementById("chatSearchInput"))
       ? document.querySelector('input[placeholder="Tìm kiếm cuộc trò chuyện..."]')
@@ -1024,7 +1326,7 @@ async function sendFriendRequestByUsername(usernameOrRaw){
     closeAddFriendDialog();
     // refresh badges & list
     loadPendingFriendRequests();
-    loadFriendsList();
+    scheduleSidebarRefresh();
   } catch (e) {
     console.error(e);
     showErrorMessage('Có lỗi khi gửi lời mời.');
@@ -1083,7 +1385,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    [...startsWith, ...contains].forEach((el) => chatList.appendChild(el));
+    // [...startsWith, ...contains].forEach((el) => chatList.appendChild(el));
   });
 });
 
@@ -1274,5 +1576,92 @@ async function showFriendRequestsModal() {
 
   frLoading = false;
 }
+
+
+// helper: chống spam gọi
+function debounce(fn, ms = 250) {
+  let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+
+let refreshVersion = 0;             // tránh ghi đè kết quả cũ
+
+async function refreshSidebar() {
+  const myVer = ++refreshVersion;
+  try {
+    const [friendsRes, groupsRes] = await Promise.all([
+      fetch('/api/friends/list',    { headers: csrfHeader?{[csrfHeader]:csrfToken}:{} }),
+      fetch('/api/groups/my-groups',{ headers: csrfHeader?{[csrfHeader]:csrfToken}:{} })
+    ]);
+    if (myVer !== refreshVersion) return;          // đã có lần refresh mới hơn
+
+    const friends = friendsRes.ok ? await friendsRes.json() : [];
+    const groups  = groupsRes.ok  ? await groupsRes.json()  : [];
+    renderSidebar(friends, groups);
+  } catch (err) { console.error('refreshSidebar', err); }
+}
+
+const scheduleSidebarRefresh = debounce(refreshSidebar, 300);
+function renderSidebar(friends = [], groups = []) {
+  const chatList = document.getElementById('chatList');
+  if (!chatList) return;
+
+  // Giữ lại keyword đang search
+  const kw = (document.getElementById('chatSearchInput')?.value || '').trim().toLowerCase();
+
+  chatList.innerHTML = '';
+  addPublicChannelToList();
+
+  // Friends
+  const fSec = createSection('👥 Bạn bè', friends.length);
+  chatList.appendChild(fSec);
+  friends.forEach(f => chatList.appendChild(createFriendItem(f)));
+
+  // Groups
+  const gSec = createSection('🏠 Nhóm chat', groups.length);
+  chatList.appendChild(gSec);
+  groups.forEach(g => chatList.appendChild(createGroupItem(g)));
+
+  // Re-apply filter (ẩn/hiện, **không reposition**)
+  if (kw) chatList.querySelectorAll('.chat-item').forEach(it => {
+    const name = it.querySelector('h3, .chat-name, h4')?.textContent.toLowerCase() || '';
+    it.style.display = name.includes(kw) ? '' : 'none';
+  });
+  enrichAvatarsFromAPI(friends);
+}
+
+async function enrichAvatarsFromAPI(friends = []) {
+  // Những bạn thiếu avatarUrl
+  const need = friends.filter(f => f.username && !extractAvatarUrl(f) && !avatarCache.get(f.username));
+  if (need.length === 0) return;
+
+  const updated = []; // usernames đã cập nhật
+  await Promise.allSettled(
+      need.map(async (f) => {
+        try {
+          const res = await fetch(`/api/users/by-username/${encodeURIComponent(f.username)}`, {
+            headers: csrfHeader ? { [csrfHeader]: csrfToken } : {}
+          });
+          if (!res.ok) return;
+          const u = await res.json();
+
+          const url = u?.avatarUrl || u?.avatar_url || '';
+          if (u?.username && url) {
+            avatarCache.set(u.username, url);
+            updated.push(u.username);
+
+            // Patch ngay ở sidebar (nếu node đang hiển thị)
+            patchSidebarAvatar(u.username, url, u.fullName || u.username);
+          }
+        } catch { /* noop */ }
+      })
+  );
+
+  // 👉 Chỉ refresh 1 lần nếu có cập nhật (phòng trường hợp DOM chưa có holder để patch)
+  if (updated.length) {
+    scheduleSidebarRefresh();
+  }
+}
+
+
 
 

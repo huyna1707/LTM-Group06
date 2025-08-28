@@ -62,10 +62,18 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/", "/home", "/login", "/signup", "/register",
                                 "/css/**", "/js/**", "/images/**", "/webjars/**").permitAll()
+
+                        // THÊM DÒNG NÀY: cho phép truy cập ảnh đã upload
+                        .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
+
+                        // tuỳ chọn (nếu bạn để websocket public):
+                        // .requestMatchers("/ws/**").permitAll()
+
                         .requestMatchers(HttpMethod.POST, "/signup").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
                         .anyRequest().authenticated()
                 )
+
 
                 // Không dùng httpBasic (chúng ta dùng form login)
                 .httpBasic(AbstractHttpConfigurer::disable)
