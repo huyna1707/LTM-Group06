@@ -200,7 +200,7 @@ public class PrivateChatApi {
                 m.setCreatedAt(LocalDateTime.now());
                 m.setIsRead(false);
                 m = privateMessageRepository.save(m);
-                
+
             }
             for (AttachmentDTO a : atts) {
                 String url = Optional.ofNullable(a.getUrl()).orElse("").trim();
@@ -248,6 +248,7 @@ public class PrivateChatApi {
                 dto.put("timestamp", m.getCreatedAt().toString());
 
                 messaging.convertAndSendToUser(other.getUsername(), "/queue/private", dto);
+                messaging.convertAndSendToUser(me.getUsername(),    "/queue/private", dto);
             }
 
             chat.setLastMessageAt(LocalDateTime.now());

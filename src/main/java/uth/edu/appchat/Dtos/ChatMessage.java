@@ -13,5 +13,5 @@ public class ChatMessage {
     private String to;
     private Type type;
     private String timestamp;
-    public List<AttachmentDTO> attachments;
+    private List<AttachmentDTO> attachments;
 }

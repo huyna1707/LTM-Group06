@@ -20,7 +20,7 @@ const attachBtn = document.getElementById("attachBtn");
 const attachInput = document.getElementById("attachInput");
 const attachmentPreviewBar = document.getElementById("attachmentPreviewBar");
 let pendingAttachments = []; // [{type:'image'|'video', url, name, size}]
-
+const groupMsgIndex = new Map();
 let stompClient = null;
 let username = null;
 let currentChat = null; // {type: 'public'|'private'|'group', id, name}
@@ -120,9 +120,9 @@ function onConnected() {
   // stompClient.subscribe(`/user/${username}/private`, onPrivateMessageReceived);
   // stompClient.subscribe(`/user/${username}/friend-request`, onFriendRequestReceived);
   // stompClient.subscribe(`/user/${username}/group`, onGroupMessageReceived);
-   stompClient.subscribe('/user/queue/private',        onPrivateMessageReceived);
-   stompClient.subscribe('/user/queue/friend-request', onFriendRequestReceived);
-   stompClient.subscribe('/user/queue/group',          onGroupMessageReceived);
+  stompClient.subscribe('/user/queue/private',        onPrivateMessageReceived);
+  stompClient.subscribe('/user/queue/friend-request', onFriendRequestReceived);
+  stompClient.subscribe('/user/queue/group',          onGroupMessageReceived);
   loadInitialData();
   loadPendingFriendRequests();
   stompClient.send('/app/chat.join', {}, JSON.stringify({ sender: username, type: 'JOIN' }));
@@ -153,14 +153,45 @@ function onPrivateMessageReceived(payload) {
   }
   updateChatListWithNewMessage();
 }
+// Sửa handler group:
 function onGroupMessageReceived(payload) {
   const message = JSON.parse(payload.body);
+
+  // chỉ render nếu đang mở đúng group
   const msgGroupId = message.groupId ?? message.chatId ?? message.group?.id;
-  if (currentChat?.type === 'group' && currentChat?.id == msgGroupId) {
-    try { displayGroupMessage(message, true); } catch (e) { console.error(e); }
+  if (!(currentChat?.type === 'group' && currentChat?.id == msgGroupId)) {
+    updateChatListWithNewMessage();
+    return;
   }
-  updateChatListWithNewMessage();
+
+  const hasAtt = Array.isArray(message.attachments) && message.attachments.length > 0;
+  const mid = message.id || null;
+
+  if (mid) {
+    const prev = groupMsgIndex.get(mid);
+    if (prev) {
+      // đã render trước đó
+      if (prev.hasAtt || !hasAtt) {
+        // 1) đã có bản tốt (có file) rồi → bỏ qua bản kém
+        // 2) cả hai đều kém (không file) → bỏ qua trùng
+        return;
+      }
+      // trước đó không có file, giờ có file → UPGRADE
+      updateGroupMessageBubble(message);
+      groupMsgIndex.set(mid, { hasAtt: true });
+      return;
+    } else {
+      // lần đầu thấy id này → render mới
+      displayGroupMessage(message, true);
+      groupMsgIndex.set(mid, { hasAtt });
+      return;
+    }
+  }
+
+  displayGroupMessage(message, true);
 }
+
+
 
 function onFriendRequestReceived(payload) {
   const notification = JSON.parse(payload.body);
@@ -449,21 +480,38 @@ function clearAttachmentPreview() {
   if (attachmentPreviewBar) attachmentPreviewBar.innerHTML = '';
 }
 
-function renderAttachmentsHtml(atts = []) {
-  if (!atts.length) return '';
-  const items = atts.map(a => {
-    if (a.type === 'image') {
-      return `<img src="${a.url}" alt="${a.name||''}" class="mt-2 rounded-lg max-h-64 object-contain">`;
+function renderAttachmentsHtml(atts) {
+  let arr = atts;
+  if (typeof arr === 'string') {
+    try { arr = JSON.parse(arr); } catch { arr = []; }
+  }
+  if (!Array.isArray(arr)) arr = arr ? [arr] : [];
+  if (arr.length === 0) return '';
+  const inferType = (url='') => {
+    const u = String(url).toLowerCase();
+    if (/\.(png|jpg|jpeg|gif|webp|bmp|svg)$/.test(u)) return 'image';
+    if (/\.(mp4|webm|ogg|mov|m4v)$/.test(u))          return 'video';
+    return 'file';
+  };
+  const items = arr.map(a => {
+    const url  = a?.url || '';
+    const name = a?.name || (url ? url.split('/').pop() : 'Tệp đính kèm');
+    const type = (a?.type || '').toLowerCase() || inferType(url);
+
+    if (!url) return '';
+
+    if (type === 'image') {
+      return `<img src="${url}" alt="${name}" class="mt-2 rounded-lg max-h-64 object-contain">`;
     }
-    if (a.type === 'video') {
-      return `<video src="${a.url}" class="mt-2 rounded-lg max-h-64" controls playsinline></video>`;
+    if (type === 'video') {
+      return `<video src="${url}" class="mt-2 rounded-lg max-h-64" controls playsinline></video>`;
     }
-    return `<a href="${a.url}" download
-           class="mt-2 inline-block text-purple-600 underline"
-           rel="noopener">${a.name || 'Tệp đính kèm'}</a>`;
+    return `<a href="${url}" download class="mt-2 inline-block text-lightgreen underline" rel="noopener">${name}</a>`;
   }).join('');
-  return `<div class="attachments">${items}</div>`;
+
+  return items ? `<div class="attachments">${items}</div>` : '';
 }
+
 /* ========================================================
    SEND MESSAGE
 ======================================================== */
@@ -520,6 +568,58 @@ async function sendGroupMessage(content, attachments = []) {
 /* ========================================================
    MESSAGE DISPLAY (ƯU TIÊN BIỆT DANH)
 ======================================================== */
+function buildGroupBubble(message) {
+  const div = document.createElement('div');
+  div.className = 'flex items-start space-x-3 message-bubble';
+
+  const s = normalizeSender(message);
+  const isMe = s.username === username;
+
+  const displayName = resolveDisplayNameFromMap(s);
+  const initials = getInitials(displayName);
+  const gradient = pickGradient(simpleHash(s.username || String(s.id || '')));
+  const t = message.timestamp ? new Date(message.timestamp) : null;
+  const time = (t && !isNaN(t)) ? t.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})
+      : new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
+  const hasAtt = Array.isArray(message.attachments) && message.attachments.length > 0;
+
+  if (isMe) {
+    div.classList.add('justify-end');
+    div.innerHTML = `
+      <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md break-words">
+        ${ hasAtt ? '' : `<p class="text-white">${message.content || ''}</p>` }
+        ${renderAttachmentsHtml(message.attachments)}
+        <div class="flex items-center justify-end mt-1"><span class="text-xs text-purple-100">${time}</span></div>
+      </div>
+      <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>`;
+  } else {
+    div.classList.add('items-start');
+    div.innerHTML = `
+      <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>
+      <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md break-words">
+        <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">${displayName}</div>
+        ${ hasAtt ? '' : `<p class="text-gray-800 dark:text-gray-200">${message.content || ''}</p>` }
+        ${renderAttachmentsHtml(message.attachments)}
+        <div class="flex items-center justify-end mt-1"><span class="text-xs text-gray-500 dark:text-gray-400">${time}</span></div>
+      </div>`;
+  }
+  return div;
+}
+
+function looksLikeFileUrl(s) {
+  return /^https?:\/\/|^\/uploads\//i.test((s || '').trim());
+}
+function escapeHtml(s){
+  return (s||'').replace(/[&<>"']/g, m => (
+      {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]
+  ));
+}
+function renderTextHtml(raw, className) {
+  const t = (raw || '').trim();
+  if (!t || looksLikeFileUrl(t)) return '';
+  return `<p class="${className}">${escapeHtml(t)}</p>`;
+}
+
 function displayMessage(message, autoScroll = true) {
   const div = document.createElement('div');
   div.className = 'flex items-start space-x-3 message-bubble';
@@ -533,6 +633,10 @@ function displayMessage(message, autoScroll = true) {
   const initials = getInitials(displayNameBase);
   const gradient = pickGradient(simpleHash(message.sender||''));
   const time = message.timestamp || new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
+  const hasAtt = Array.isArray(message.attachments) && message.attachments.length > 0;
+  const rawText = (message.content || '').trim();
+  const meTextHtml = renderTextHtml(rawText, 'text-white');
+  const otherTextHtml = renderTextHtml(rawText, 'text-gray-800 dark:text-gray-200');
 
   if (message.type === 'JOIN') {
     div.className = 'flex justify-center my-4';
@@ -543,22 +647,24 @@ function displayMessage(message, autoScroll = true) {
   } else if (isMe) {
     div.classList.add('justify-end');
     div.innerHTML = `
-      <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md">
-        <p class="text-white">${message.content}</p>
-        ${renderAttachmentsHtml(message.attachments)}
-        <div class="flex items-center justify-end mt-1"><span class="text-xs text-purple-100">${time}</span></div>
-      </div>
-      <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>`;
+  <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md break-words">
+   ${meTextHtml}
+    ${renderAttachmentsHtml(message.attachments)}
+    <div class="flex items-center justify-end mt-1"><span class="text-xs text-purple-100">${time}</span></div>
+  </div>
+  <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>`;
+
   } else {
     div.classList.add('items-start');
     div.innerHTML = `
-      <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>
-      <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md">
-        <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">${displayNameBase}</div>
-        <p class="text-gray-800 dark:text-gray-200">${message.content}</p>
-        ${renderAttachmentsHtml(message.attachments)}
-        <div class="flex items-center justify-end mt-1"><span class="text-xs text-gray-500 dark:text-gray-400">${time}</span></div>
-      </div>`;
+  <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>
+  <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md break-words">
+    <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">${displayNameBase}</div>
+    ${otherTextHtml}
+    ${renderAttachmentsHtml(message.attachments)}
+    <div class="flex items-center justify-end mt-1"><span class="text-xs text-gray-500 dark:text-gray-400">${time}</span></div>
+  </div>`;
+
   }
   chatMessages?.appendChild(div);
   if (autoScroll) scrollToBottom();
@@ -610,69 +716,50 @@ function displayPrivateMessage(message, autoScroll = true) {
   const time = (t && !isNaN(t)) ? t.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})
       : new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
   // ... phần innerHTML giữ nguyên như bạn đang có, chỉ thay biến dùng ở trên ...
+  const rawText = (message.content || '').trim();
+  const meTextHtml = renderTextHtml(rawText, 'text-white');
+  const otherTextHtml = renderTextHtml(rawText, 'text-gray-800 dark:text-gray-200');
 
   if (isMe) {
     div.classList.add('justify-end');
     div.innerHTML = `
-      <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md">
-        <p class="text-white">${message.content}</p>
-        ${renderAttachmentsHtml(message.attachments)}
-        <div class="flex items-center justify-end mt-1"><span class="text-xs text-purple-100">${time}</span></div>
-      </div>
-      <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>`;
+  <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md break-words">
+    ${meTextHtml}
+    ${renderAttachmentsHtml(message.attachments)}
+    <div class="flex items-center justify-end mt-1"><span class="text-xs text-purple-100">${time}</span></div>
+  </div>
+  <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>`;
+
   } else {
     div.classList.add('items-start');
     div.innerHTML = `
-      <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>
-      <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md">
-        <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">${displayName}</div>
-        <p class="text-gray-800 dark:text-gray-200">${message.content}</p>
-        ${renderAttachmentsHtml(message.attachments)}
-        <div class="flex items-center justify-end mt-1"><span class="text-xs text-gray-500 dark:text-gray-400">${time}</span></div>
-      </div>`;
+  <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>
+  <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md break-words">
+    <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">${displayName}</div>
+    ${otherTextHtml}
+    ${renderAttachmentsHtml(message.attachments)}
+    <div class="flex items-center justify-end mt-1"><span class="text-xs text-gray-500 dark:text-gray-400">${time}</span></div>
+  </div>`;
   }
   chatMessages?.appendChild(div);
   if (autoScroll) scrollToBottom();
 }
 
 function displayGroupMessage(message, autoScroll = true) {
-  const div = document.createElement('div');
-  div.className = 'flex items-start space-x-3 message-bubble';
-
-  const s = normalizeSender(message);
-  const isMe = s.username === username;
-
-  const displayName = resolveDisplayNameFromMap(s);
-  const initials = getInitials(displayName);
-  const gradient = pickGradient(simpleHash(s.username || String(s.id || '')));
-  const t = message.timestamp ? new Date(message.timestamp) : null;
-  const time = (t && !isNaN(t)) ? t.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})
-      : new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
-  // ... phần innerHTML giữ nguyên, chỉ thay biến như trên ...
-
-  if (isMe) {
-    div.classList.add('justify-end');
-    div.innerHTML = `
-      <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md break-words">
-        <p class="text-white">${message.content}</p>
-        ${renderAttachmentsHtml(message.attachments)}
-        <div class="flex items-center justify-end mt-1"><span class="text-xs text-purple-100">${time}</span></div>
-      </div>
-      <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>`;
-  } else {
-    div.classList.add('items-start');
-    div.innerHTML = `
-      <div class="w-8 h-8 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center flex-shrink-0"><span class="text-white text-sm font-bold">${initials}</span></div>
-      <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md break-words">
-        <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">${displayName}</div>
-        <p class="text-gray-800 dark:text-gray-200">${message.content}</p>
-        ${renderAttachmentsHtml(message.attachments)}
-        <div class="flex items-center justify-end mt-1"><span class="text-xs text-gray-500 dark:text-gray-400">${time}</span></div>
-      </div>`;
-  }
+  const div = buildGroupBubble(message);
+  if (message.id) div.setAttribute('data-mid', String(message.id)); // để còn update
   chatMessages?.appendChild(div);
   if (autoScroll) scrollToBottom();
 }
+function updateGroupMessageBubble(message) {
+  if (!message.id) return displayGroupMessage(message, false);
+  const div = chatMessages?.querySelector(`.message-bubble[data-mid="${message.id}"]`);
+  if (!div) return displayGroupMessage(message, false);
+
+  const fresh = buildGroupBubble(message);
+  div.innerHTML = fresh.innerHTML; // thay nội dung (giữ nguyên vị trí)
+}
+
 
 /* ========================================================
    FRIEND SYSTEM
