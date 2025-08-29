@@ -56,4 +56,8 @@ public interface PrivateMessageRepository extends JpaRepository<PrivateMessage, 
     // Lấy tin nhắn theo thứ tự giảm dần để rollback
     @Query("SELECT pm FROM PrivateMessage pm WHERE pm.privateChat = :chat ORDER BY pm.createdAt DESC")
     List<PrivateMessage> findByPrivateChatOrderByCreatedAtDesc(@Param("chat") PrivateChat chat);
+
+    // Đếm số người gửi khác nhau trong chat trong khoảng ngày (start..end)
+    @Query("SELECT COUNT(DISTINCT pm.sender.id) FROM PrivateMessage pm WHERE pm.privateChat = :chat AND pm.createdAt BETWEEN :startDate AND :endDate")
+    Long countDistinctSendersInRange(@Param("chat") PrivateChat chat, @Param("startDate") java.time.LocalDateTime startDate, @Param("endDate") java.time.LocalDateTime endDate);
 }

@@ -26,6 +26,7 @@ public class FriendController {
     private final FriendRepository friendRepository;
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final uth.edu.appchat.Repositories.PrivateChatRepository privateChatRepository;
 
     // DTO classes
     public static class FriendRequestDto {
@@ -38,6 +39,8 @@ public class FriendController {
         public String fullName;
         public String status;
         public LocalDateTime createdAt;
+    public Integer streakCount;
+    public java.time.LocalDate streakLastDate;
     }
 
     // Gửi lời mời kết bạn
@@ -201,6 +204,22 @@ public class FriendController {
                 friendDto.fullName = friendUser.getFullName();
                 friendDto.status = friendUser.getStatus() != null ? friendUser.getStatus().toString() : "OFFLINE";
                 friendDto.createdAt = friendship.getCreatedAt();
+
+                // try to attach streak info if private chat exists
+                try {
+                    java.util.Optional<uth.edu.appchat.Models.PrivateChat> pcOpt = privateChatRepository.findByUsers(currentUser, friendUser);
+                    if (pcOpt.isPresent()) {
+                        var pc = pcOpt.get();
+                        friendDto.streakCount = pc.getStreakCount() == null ? 0 : pc.getStreakCount();
+                        friendDto.streakLastDate = pc.getStreakLastDate();
+                    } else {
+                        friendDto.streakCount = 0;
+                        friendDto.streakLastDate = null;
+                    }
+                } catch (Exception ignore) {
+                    friendDto.streakCount = 0;
+                    friendDto.streakLastDate = null;
+                }
 
                 friends.add(friendDto);
             }

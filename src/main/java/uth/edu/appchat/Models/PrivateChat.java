@@ -53,6 +53,35 @@ public class PrivateChat {
     @Column(name = "last_message_at")
     private LocalDateTime lastMessageAt;
 
+    // === Streak feature ===
+    // number of consecutive days with at least one message
+    // Some DB schemas still have a 'streak' column (INT NOT NULL). Map it to prevent insert errors.
+    @Builder.Default
+    @Column(name = "streak")
+    private Integer streak = 0;
+
+    @Column(name = "streak_count")
+    private Integer streakCount;
+
+    // date (server local) of the last day that contributed to streak (yyyy-MM-dd)
+    @Column(name = "streak_last_date")
+    private java.time.LocalDate streakLastDate;
+
+    // number of recovery usages in the tracked month
+    @Column(name = "streak_recovery_used")
+    private Integer streakRecoveryUsed;
+
+    @Column(name = "streak_recovery_month")
+    private Integer streakRecoveryMonth; // 1-12
+
+    @Column(name = "streak_recovery_year")
+    private Integer streakRecoveryYear;
+
+    // legacy DB column for recovery/restore count; present in DB as NOT NULL in some setups
+    @Builder.Default
+    @Column(name = "restore_count")
+    private Integer restoreCount = 0;
+
     @OneToMany(mappedBy = "privateChat", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("createdAt ASC")
     @JsonIgnore

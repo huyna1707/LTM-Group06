@@ -83,6 +83,14 @@ function simpleHash(str) {
   return Math.abs(h);
 }
 
+// Return local date string YYYY-MM-DD (uses local timezone)
+function localYYYYMMDD(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 /* ========================================================
    WEBSOCKET + STOMP
 ======================================================== */
@@ -152,6 +160,15 @@ function onPrivateMessageReceived(payload) {
   if (currentChat?.type === 'private' && currentChat?.id == msgChatId) {
     try { displayPrivateMessage(message, true); } catch (e) { console.error(e); }
   }
+  // update header streak if payload carries streak info for this chat
+  try {
+    const p = JSON.parse(payload.body);
+    if (p && (p.streakCount !== undefined || p.streak_count !== undefined)) {
+      const sc = p.streakCount ?? p.streak_count ?? 0;
+      const active = !!(p.sufficientSendersToday || p.sufficient_senders_today);
+      updateStreakBadge(sc, active);
+    }
+  } catch (e) { /* ignore */ }
   updateChatListWithNewMessage();
 }
 function onGroupMessageReceived(payload) {
@@ -160,6 +177,15 @@ function onGroupMessageReceived(payload) {
   if (currentChat?.type === 'group' && currentChat?.id == msgGroupId) {
     try { displayGroupMessage(message, true); } catch (e) { console.error(e); }
   }
+  // update header streak if payload carries streak info for this group
+  try {
+    const p = JSON.parse(payload.body);
+    if (p && (p.streakCount !== undefined || p.streak_count !== undefined)) {
+      const sc = p.streakCount ?? p.streak_count ?? 0;
+      const active = !!(p.sufficientSendersToday || p.sufficient_senders_today);
+      updateStreakBadge(sc, active);
+    }
+  } catch (e) { /* ignore */ }
   updateChatListWithNewMessage();
 }
 
@@ -267,6 +293,23 @@ function createFriendItem(friend) {
   // 👉 thêm data-username để tìm lại node khi cần
   w.setAttribute('data-username', friend.username || '');
 
+  // render streak: use backend-provided active flag if present, otherwise compare last date to today
+  let streakHtml = '';
+  const friendStreak = friend ? (friend.streakCount ?? friend.streak_count ?? 0) : 0;
+  if (friendStreak && friendStreak > 0) {
+    let active = false;
+    if (friend) {
+      if (friend.sufficientSendersToday !== undefined || friend.sufficient_senders_today !== undefined) {
+        active = !!(friend.sufficientSendersToday || friend.sufficient_senders_today);
+        } else if (friend.streakLastDate || friend.streak_last_date) {
+          const last = (friend.streakLastDate ?? friend.streak_last_date)?.toString();
+          const today = localYYYYMMDD();
+          active = last === today;
+        }
+    }
+    const colorClass = active ? 'text-orange-500' : 'text-gray-400';
+    streakHtml = `<span class="ml-2 text-sm font-semibold ${colorClass}">🔥${friendStreak}</span>`;
+  }
   w.innerHTML = `
     <div class="flex items-center space-x-3">
       <!-- 👉 holder để thay avatar in-place -->
@@ -274,7 +317,7 @@ function createFriendItem(friend) {
         ${renderAvatar(url, initials, gradient, 10)}
       </div>
       <div class="flex-1 min-w-0">
-        <h4 class="chat-name font-medium text-gray-900 dark:text-white truncate text-sm">${displayName}</h4>
+  <h4 class="chat-name font-medium text-gray-900 dark:text-white truncate text-sm">${displayName}${streakHtml}</h4>
         <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${friend.status==='ONLINE'?'Đang online':'Offline'}</p>
       </div>
     </div>`;
@@ -297,6 +340,23 @@ function createGroupItem(group) {
   const w = document.createElement('div');
   w.className = "chat-item p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors";
   w.onclick = () => switchToGroupChat(group);
+  // render group streak similarly: prefer explicit flag, otherwise compare last date
+  let streakHtml = '';
+  const groupStreak = group ? (group.streakCount ?? group.streak_count ?? 0) : 0;
+  if (groupStreak && groupStreak > 0) {
+    let active = false;
+    if (group) {
+      if (group.sufficientSendersToday !== undefined || group.sufficient_senders_today !== undefined) {
+        active = !!(group.sufficientSendersToday || group.sufficient_senders_today);
+      } else if (group.streakLastDate || group.streak_last_date) {
+        const last = (group.streakLastDate ?? group.streak_last_date)?.toString();
+        const today = localYYYYMMDD();
+        active = last === today;
+      }
+    }
+    const colorClass = active ? 'text-orange-500' : 'text-gray-400';
+    streakHtml = `<span class="ml-2 text-sm font-semibold ${colorClass}">🔥${groupStreak}</span>`;
+  }
   w.innerHTML = `
     <div class="flex items-center space-x-3">
       <div class="relative">
@@ -304,7 +364,7 @@ function createGroupItem(group) {
         <div class="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-white dark:border-gray-900"></div>
       </div>
       <div class="flex-1 min-w-0">
-        <h4 class="chat-name font-medium text-gray-900 dark:text-white truncate text-sm">${group.name}</h4>
+  <h4 class="chat-name font-medium text-gray-900 dark:text-white truncate text-sm">${group.name}${streakHtml}</h4>
         <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${group.memberCount} thành viên</p>
       </div>
     </div>`;
@@ -346,6 +406,28 @@ applyNicknameBtn?.addEventListener('click', ()=>{
   if (chatTitleEl) chatTitleEl.textContent = nick || defaultTitleForCurrentChat();
 });
 
+// Streak badge helper (header)
+function updateStreakBadge(count, active) {
+  const el = document.getElementById('streakBadge');
+  if (!el) return;
+  if (!count || count <= 0) {
+    el.classList.add('hidden');
+    el.textContent = '🔥0';
+    el.classList.remove('text-orange-500');
+    el.classList.add('text-gray-400');
+    return;
+  }
+  el.classList.remove('hidden');
+  el.textContent = `🔥${count}`;
+  if (active) {
+    el.classList.remove('text-gray-400');
+    el.classList.add('text-orange-500');
+  } else {
+    el.classList.remove('text-orange-500');
+    el.classList.add('text-gray-400');
+  }
+}
+
 /* ========================================================
    SWITCH CHAT
 ======================================================== */
@@ -385,6 +467,27 @@ async function switchToPrivateChat(friend) {
       // Tải biệt danh partner rồi reload history (đảm bảo áp dụng nickname)
       await loadPrivatePartnerNickname(currentChat.id);
       initBlockToggleForCurrentChat();
+      // Fetch partner-with-nickname (includes streak) and update header streak badge
+      try {
+        const partnerRes = await fetch(`/api/private-chat/${chatData.chatId}/partner-with-nickname`, { headers: { [csrfHeader]: csrfToken } });
+        if (partnerRes.ok) {
+          const partner = await partnerRes.json();
+          const streak = partner ? (partner.streakCount ?? partner.streak_count ?? 0) : 0;
+          // determine active: prefer explicit flag from backend, otherwise compare streakLastDate to today
+          let active = false;
+          if (partner) {
+            if (partner.sufficientSendersToday !== undefined || partner.sufficient_senders_today !== undefined) {
+              active = !!(partner.sufficientSendersToday || partner.sufficient_senders_today);
+                  } else if (partner.streakLastDate || partner.streak_last_date) {
+                    const last = (partner.streakLastDate ?? partner.streak_last_date)?.toString();
+                    const today = localYYYYMMDD();
+                    active = last === today;
+            }
+          }
+          updateStreakBadge(streak, active);
+        }
+      } catch (e) { console.error('updateStreakBadge (private switch fetch) error', e); }
+
       await loadPrivateChatHistory(chatData.chatId);
     } else {
       showErrorMessage('Không thể bắt đầu chat riêng');
@@ -405,6 +508,12 @@ function switchToGroupChat(group) {
   loadGroupMemberNicknames(group.id).then(()=>{
     loadGroupChatHistory(group.id);
   });
+  // update header streak from group object if present
+  try {
+    const streak = group ? (group.streakCount ?? group.streak_count ?? 0) : 0;
+    const active = group ? !!(group.sufficientSendersToday || group.sufficient_senders_today) : false;
+    updateStreakBadge(streak, active);
+  } catch (e) { console.error('updateStreakBadge (group switch) error', e); }
 }
 
 /* ========================================================
@@ -1481,9 +1590,25 @@ async function loadPrivatePartnerNickname(privateChatId) {
 
     rebuildMemberNickMap([partner]);
 
-    memberNicknameList.innerHTML = '';
-    memberNicknameList.appendChild(renderMemberNicknameRow(partner));
-    memberNicknamesSection.classList.remove('hidden');
+  memberNicknameList.innerHTML = '';
+  memberNicknameList.appendChild(renderMemberNicknameRow(partner));
+  memberNicknamesSection.classList.remove('hidden');
+
+    // Update header streak badge from partner info (show immediately when partner data loads)
+    try {
+      const streak = partner ? (partner.streakCount ?? partner.streak_count ?? 0) : 0;
+      let active = false;
+      if (partner) {
+        if (partner.sufficientSendersToday !== undefined || partner.sufficient_senders_today !== undefined) {
+          active = !!(partner.sufficientSendersToday || partner.sufficient_senders_today);
+        } else if (partner.streakLastDate || partner.streak_last_date) {
+          const last = (partner.streakLastDate ?? partner.streak_last_date)?.toString();
+        const today = new Date().toISOString().slice(0,10);
+          active = last === today;
+        }
+      }
+      updateStreakBadge(streak, active);
+    } catch (err) { console.error('streak update error', err); }
   } catch (e) {
     console.error(e);
     memberNicknamesSection.classList.add('hidden');

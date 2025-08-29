@@ -71,8 +71,21 @@ public class GroupChatService {
         Long userId = getCurrentUserId();
         List<GroupChat> groups = groupMemberRepo.findActiveGroupsByUserId(userId);
         return groups.stream()
-                .map(group -> new GroupDTO(group.getId(), group.getName(), group.getMemberCount()))
+                .map(group -> {
+                    GroupDTO dto = new GroupDTO(group.getId(), group.getName(), group.getMemberCount(), group.getStreakCount());
+                    dto.setStreakLastDate(group.getStreakLastDate());
+                    return dto;
+                })
                 .collect(Collectors.toList());
+    }
+
+    // helper: expose group entity for API-level operations
+    public GroupChat getGroupById(Long id) {
+        return groupChatRepo.findById(id).orElseThrow(() -> new RuntimeException("Không tìm thấy nhóm"));
+    }
+
+    public GroupChat saveGroup(GroupChat g) {
+        return groupChatRepo.save(g);
     }
 
     public List<GroupMessageDTO> getGroupMessages(Long groupId) {
@@ -182,7 +195,7 @@ public class GroupChatService {
         }
     }
 
-    private final UserBlockRepository blockRepo;
+    // blockRepo removed (unused here)
     public void clearGroupForMe(Long groupId) {
         Long userId = getCurrentUserId();
         GroupMember me = groupMemberRepo.findByGroupChatIdAndUserId(groupId, userId)

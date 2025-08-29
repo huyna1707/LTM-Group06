@@ -51,6 +51,31 @@ public class GroupChat {
     @Column(name="last_message_at")
     private LocalDateTime lastMessageAt;
 
+        // === Streak feature for group (applies to whole group, e.g., group-level streak)
+        // legacy DB sometimes contains a plain `streak` column; map it to avoid INSERT failures
+        @Column(name = "streak")
+        private Integer streak = 0;
+
+        @Column(name = "streak_count")
+        private Integer streakCount;
+
+        @Column(name = "streak_last_date")
+        private java.time.LocalDate streakLastDate;
+
+        @Column(name = "streak_recovery_used")
+        private Integer streakRecoveryUsed;
+
+        @Column(name = "streak_recovery_month")
+        private Integer streakRecoveryMonth;
+
+        @Column(name = "streak_recovery_year")
+        private Integer streakRecoveryYear;
+
+                // legacy DB column name used previously in some migrations: restore_count
+                // Map it here to avoid "Field 'restore_count' doesn't have a default value" on INSERT
+                                @Column(name = "restore_count")
+                                private Integer restoreCount = 0;
+
     @OneToMany(mappedBy="groupChat", cascade=CascadeType.ALL, orphanRemoval=true, fetch=FetchType.LAZY)
     @OrderBy("joinedAt ASC")
     @JsonIgnore

@@ -25,6 +25,7 @@ public class PrivateChatApi {
     private final PrivateChatRepository privateChatRepository;
     private final PrivateMessageRepository privateMessageRepository;
     private final UserRepository userRepository;
+    // (removed unused field)
 
     // Lấy danh sách chat riêng của user hiện tại
     @GetMapping("/my-chats")
@@ -140,6 +141,79 @@ public class PrivateChatApi {
                     "error", "Failed to get messages: " + e.getMessage()
             ));
         }
+    }
+
+    // Lấy partner info kèm nickname + streak
+    @GetMapping("/{chatId}/partner-with-nickname")
+    public ResponseEntity<?> getPartnerWithNickname(@PathVariable Long chatId, Authentication auth) {
+        try {
+            User currentUser = userRepository.findByUsername(auth.getName())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+            PrivateChat chat = privateChatRepository.findById(chatId)
+                    .orElseThrow(() -> new RuntimeException("Chat not found"));
+            if (!chat.containsUser(currentUser)) return ResponseEntity.status(403).body(Map.of("error","Access denied"));
+            User partner = chat.getOtherUser(currentUser);
+            Map<String, Object> out = Map.of(
+                    "userId", partner.getId(),
+                    "username", partner.getUsername(),
+                    "fullName", partner.getFullName(),
+                    "nickname", chat.getNickname(),
+                    "streakCount", chat.getStreakCount() == null ? 0 : chat.getStreakCount(),
+                    "streakLastDate", chat.getStreakLastDate() != null ? chat.getStreakLastDate().toString() : null
+            );
+            return ResponseEntity.ok(out);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // Khôi phục streak cho private chat (1 tháng tối đa 2 lần)
+    @PostMapping("/{chatId}/restore-streak")
+    public ResponseEntity<?> restorePrivateStreak(@PathVariable Long chatId, Authentication auth) {
+        try {
+            User currentUser = userRepository.findByUsername(auth.getName())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+            PrivateChat chat = privateChat_repository_find(chatId);
+            if (!chat.containsUser(currentUser)) return ResponseEntity.status(403).body(Map.of("error","Access denied"));
+
+            java.time.LocalDate today = java.time.LocalDate.now();
+            java.time.LocalDate last = chat.getStreakLastDate();
+            if (last == null) {
+                chat.setStreakLastDate(today);
+                chat.setStreakCount(1);
+                chat.setStreakRecoveryUsed(0);
+                privateChatRepository.save(chat);
+                return ResponseEntity.ok(Map.of("restored", true, "streakCount", chat.getStreakCount()));
+            }
+
+            long gap = java.time.temporal.ChronoUnit.DAYS.between(last, today);
+            if (gap <= 1) {
+                return ResponseEntity.badRequest().body(Map.of("error","Không cần khôi phục"));
+            }
+            // only allow if exactly missed 1 day
+            if (gap > 2) return ResponseEntity.badRequest().body(Map.of("error","Khoảng cách quá lớn, không thể khôi phục"));
+
+            // check monthly usage
+            int m = today.getMonthValue(), y = today.getYear();
+            if (chat.getStreakRecoveryMonth() == null || chat.getStreakRecoveryYear() == null || chat.getStreakRecoveryMonth()!=m || chat.getStreakRecoveryYear()!=y) {
+                chat.setStreakRecoveryMonth(m); chat.setStreakRecoveryYear(y); chat.setStreakRecoveryUsed(0);
+            }
+            Integer used = chat.getStreakRecoveryUsed() == null ? 0 : chat.getStreakRecoveryUsed();
+            if (used >= 2) return ResponseEntity.badRequest().body(Map.of("error","Đã dùng hết lượt khôi phục trong tháng"));
+
+            chat.setStreakRecoveryUsed(used+1);
+            // set last date to yesterday so streak appears continuous
+            chat.setStreakLastDate(today.minusDays(1));
+            privateChatRepository.save(chat);
+            return ResponseEntity.ok(Map.of("restored", true, "streakCount", chat.getStreakCount(), "used", chat.getStreakRecoveryUsed()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // helper to find private chat (to avoid ambiguous variable names in patch)
+    private PrivateChat privateChat_repository_find(Long id) {
+        return privateChatRepository.findById(id).orElseThrow(() -> new RuntimeException("Chat not found"));
     }
 
     // Gửi tin nhắn riêng

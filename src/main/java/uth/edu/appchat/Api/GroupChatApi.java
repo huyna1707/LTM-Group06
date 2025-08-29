@@ -13,6 +13,7 @@ import uth.edu.appchat.Models.User;
 import uth.edu.appchat.Repositories.UserRepository;
 import uth.edu.appchat.Services.GroupChatService;
 import java.util.List;
+import java.util.Map;
 import uth.edu.appchat.Dtos.MemberNicknameDTO;
 import java.security.Principal;
 
@@ -27,6 +28,33 @@ public class GroupChatApi {
     public ResponseEntity<List<GroupDTO>> getMyGroups() {
         List<GroupDTO> groups = groupChatService.getMyGroups();
         return ResponseEntity.ok(groups);
+    }
+
+    @PostMapping("/{groupId}/restore-streak")
+    public ResponseEntity<?> restoreGroupStreak(@PathVariable Long groupId) {
+        try {
+            var g = groupChatService.getGroupById(groupId);
+            java.time.LocalDate today = java.time.LocalDate.now();
+            java.time.LocalDate last = g.getStreakLastDate();
+            if (last == null) { g.setStreakLastDate(today); g.setStreakCount(1); }
+            else {
+                long gap = java.time.temporal.ChronoUnit.DAYS.between(last, today);
+                if (gap <= 1) return ResponseEntity.badRequest().body(Map.of("error","Không cần khôi phục"));
+                if (gap > 2) return ResponseEntity.badRequest().body(Map.of("error","Khoảng cách quá lớn, không thể khôi phục"));
+                int m = today.getMonthValue(), y = today.getYear();
+                if (g.getStreakRecoveryMonth() == null || g.getStreakRecoveryYear() == null || g.getStreakRecoveryMonth()!=m || g.getStreakRecoveryYear()!=y) {
+                    g.setStreakRecoveryMonth(m); g.setStreakRecoveryYear(y); g.setStreakRecoveryUsed(0);
+                }
+                Integer used = g.getStreakRecoveryUsed() == null ? 0 : g.getStreakRecoveryUsed();
+                if (used >= 2) return ResponseEntity.badRequest().body(Map.of("error","Đã dùng hết lượt khôi phục trong tháng"));
+                g.setStreakRecoveryUsed(used+1);
+                g.setStreakLastDate(today.minusDays(1));
+            }
+            groupChatService.saveGroup(g);
+            return ResponseEntity.ok(Map.of("restored", true, "streakCount", g.getStreakCount()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @PostMapping("/create")
