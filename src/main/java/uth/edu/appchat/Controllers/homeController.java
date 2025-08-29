@@ -1,6 +1,5 @@
 package uth.edu.appchat.Controllers;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Controller;
@@ -10,10 +9,13 @@ import uth.edu.appchat.Models.User;
 import uth.edu.appchat.Repositories.UserRepository;
 
 @Controller
-@RequiredArgsConstructor
 public class homeController {
 
     private final UserRepository userRepository;
+
+    public homeController(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
 
     @GetMapping("/")
     public String indexPage(Model model, @AuthenticationPrincipal UserDetails userDetails) {
@@ -31,8 +33,5 @@ public class homeController {
         return "index";
     }
 
-    @GetMapping("/login")
-    public String loginPage() {
-        return "login"; // trả file templates/login.html
-    }
+
 }

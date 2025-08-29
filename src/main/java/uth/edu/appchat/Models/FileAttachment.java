@@ -9,59 +9,52 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "file_attachments")
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
+@Table(name="file_attachments",
+        indexes = {
+                @Index(name="idx_fa_uploader", columnList="uploader_id"),
+                @Index(name="idx_fa_pm", columnList="private_message_id"),
+                @Index(name="idx_fa_gm", columnList="group_message_id"),
+                @Index(name="idx_fa_uploaded", columnList="uploadedAt")
+        })
+// @Check(constraints="(private_message_id IS NOT NULL) + (group_message_id IS NOT NULL) = 1") // nếu MySQL hỗ trợ
+@Data @NoArgsConstructor @AllArgsConstructor
 public class FileAttachment {
-    
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id @GeneratedValue(strategy=GenerationType.IDENTITY)
     private Long id;
-    
-    @Column(nullable = false, length = 255)
-    private String fileName;        // Tên file được lưu trên server: "abc123.jpg"
-    
-    @Column(nullable = false, length = 255)
-    private String originalName;    // Tên file gốc từ user: "Ảnh đẹp.jpg"
-    
-    @Column(nullable = false, length = 100)
-    private String fileType;        // MIME type: "image/jpeg", "application/pdf"
-    
-    @Column(nullable = false)
-    private Long fileSize;          // Kích thước file (bytes)
-    
-    @Column(nullable = false, length = 500)
-    private String filePath;        // Đường dẫn file trên server: "/uploads/2025/08/abc123.jpg"
-    
-    @Column(length = 500)
-    private String fileUrl;         // URL public để truy cập file
-    
+
+    @Column(nullable=false, length=255) private String fileName;
+    @Column(nullable=false, length=255) private String originalName;
+    @Column(nullable=false, length=100) private String fileType;
+    @Column(nullable=false) private Long fileSize;
+    @Column(nullable=false, length=500) private String filePath;
+    @Column(length=500) private String fileUrl;
+
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable=false, length=20)
     private AttachmentType attachmentType;
-    
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "uploader_id", nullable = false)
-    private User uploader;          // Người upload file
-    
-    // Liên kết với tin nhắn private
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "private_message_id")
+
+    @ManyToOne(fetch=FetchType.LAZY, optional=false)
+    @JoinColumn(name="uploader_id", nullable=false,
+            foreignKey = @ForeignKey(name="fk_fa_uploader"))
+    private User uploader;
+
+    @ManyToOne(fetch=FetchType.LAZY)
+    @JoinColumn(name="private_message_id",
+            foreignKey=@ForeignKey(name="fk_fa_private_msg"))
     private PrivateMessage privateMessage;
-    
-    // Liên kết với tin nhắn group
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "group_message_id")
+
+    @ManyToOne(fetch=FetchType.LAZY)
+    @JoinColumn(name="group_message_id",
+            foreignKey=@ForeignKey(name="fk_fa_group_msg"))
     private GroupMessage groupMessage;
-    
+
     @CreationTimestamp
-    @Column(nullable = false, updatable = false)
+    @Column(nullable=false, updatable=false)
     private LocalDateTime uploadedAt;
-    
-    @Column(nullable = false)
-    private Boolean isActive = true; // Soft delete
-    
+
+    @Column(nullable=false)
+    private Boolean isActive = true;
+
     // Enum cho loại file
     public enum AttachmentType {
         IMAGE,      // jpg, png, gif, webp
@@ -71,7 +64,7 @@ public class FileAttachment {
         ARCHIVE,    // zip, rar, 7z
         OTHER       // Các loại khác
     }
-    
+
     // Helper methods
     public String getFormattedFileSize() {
         if (fileSize < 1024) {
@@ -84,26 +77,26 @@ public class FileAttachment {
             return String.format("%.1f GB", fileSize / (1024.0 * 1024.0 * 1024.0));
         }
     }
-    
+
     public String getFileExtension() {
         if (originalName != null && originalName.contains(".")) {
             return originalName.substring(originalName.lastIndexOf("."));
         }
         return "";
     }
-    
+
     public boolean isImage() {
         return attachmentType == AttachmentType.IMAGE;
     }
-    
+
     public boolean isVideo() {
         return attachmentType == AttachmentType.VIDEO;
     }
-    
+
     public boolean isAudio() {
         return attachmentType == AttachmentType.AUDIO;
     }
-    
+
     public boolean isDocument() {
         return attachmentType == AttachmentType.DOCUMENT;
     }

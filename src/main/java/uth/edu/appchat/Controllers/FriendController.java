@@ -94,9 +94,9 @@ public class FriendController {
             notification.put("message", "Bạn có lời mời kết bạn mới");
 
             messagingTemplate.convertAndSendToUser(
-                targetUser.getUsername(),
-                "/friend-request",
-                notification
+                    targetUser.getUsername(),
+                    "/friend-request",
+                    notification
             );
 
             return ResponseEntity.ok("Đã gửi lời mời kết bạn thành công");
@@ -146,9 +146,9 @@ public class FriendController {
             notification.put("message", "Lời mời kết bạn đã được chấp nhận");
 
             messagingTemplate.convertAndSendToUser(
-                requestUser.getUsername(),
-                "/friend-request",
-                notification
+                    requestUser.getUsername(),
+                    "/friend-request",
+                    notification
             );
 
             // Gửi thông báo cập nhật danh sách bạn bè cho cả hai người
@@ -158,16 +158,16 @@ public class FriendController {
 
             // Gửi cho người chấp nhận (currentUser)
             messagingTemplate.convertAndSendToUser(
-                currentUser.getUsername(),
-                "/friend-request",
-                friendListUpdate
+                    currentUser.getUsername(),
+                    "/friend-request",
+                    friendListUpdate
             );
 
             // Gửi cho người gửi lời mời (requestUser)
             messagingTemplate.convertAndSendToUser(
-                requestUser.getUsername(),
-                "/friend-request",
-                friendListUpdate
+                    requestUser.getUsername(),
+                    "/friend-request",
+                    friendListUpdate
             );
 
             return ResponseEntity.ok("Đã chấp nhận lời mời kết bạn");
@@ -192,8 +192,8 @@ public class FriendController {
 
             for (Friend friendship : friendships) {
                 User friendUser = friendship.getUser().getId().equals(currentUser.getId())
-                    ? friendship.getFriend()
-                    : friendship.getUser();
+                        ? friendship.getFriend()
+                        : friendship.getUser();
 
                 FriendDto friendDto = new FriendDto();
                 friendDto.id = friendUser.getId();

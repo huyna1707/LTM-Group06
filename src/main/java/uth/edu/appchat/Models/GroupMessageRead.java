@@ -25,7 +25,7 @@ public class GroupMessageRead {
 
     // Unique constraint: một user chỉ đọc một message một lần
     @Table(uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"group_message_id", "user_id"})
+            @UniqueConstraint(columnNames = {"group_message_id", "user_id"})
     })
     public static class Constraints {}
 }

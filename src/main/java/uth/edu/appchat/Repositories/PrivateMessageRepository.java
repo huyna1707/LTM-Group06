@@ -28,8 +28,8 @@ public interface PrivateMessageRepository extends JpaRepository<PrivateMessage, 
     // Tìm tin nhắn trong khoảng thời gian
     @Query("SELECT pm FROM PrivateMessage pm WHERE pm.privateChat = :chat AND pm.createdAt BETWEEN :startDate AND :endDate ORDER BY pm.createdAt ASC")
     List<PrivateMessage> findByPrivateChatAndDateRange(@Param("chat") PrivateChat chat,
-                                                      @Param("startDate") LocalDateTime startDate,
-                                                      @Param("endDate") LocalDateTime endDate);
+                                                       @Param("startDate") LocalDateTime startDate,
+                                                       @Param("endDate") LocalDateTime endDate);
 
     // Tìm tin nhắn gần nhất
     @Query("SELECT pm FROM PrivateMessage pm WHERE pm.privateChat = :chat ORDER BY pm.createdAt DESC LIMIT :limit")
@@ -38,7 +38,7 @@ public interface PrivateMessageRepository extends JpaRepository<PrivateMessage, 
     // Đếm tin nhắn chưa đọc
     @Query("SELECT COUNT(pm) FROM PrivateMessage pm WHERE pm.privateChat = :chat AND pm.sender != :user AND pm.isRead = false")
     Long countUnreadMessages(@Param("chat") PrivateChat chat, @Param("user") User user);
-    
+
     // Đánh dấu đã đọc
     @Query("UPDATE PrivateMessage pm SET pm.isRead = true WHERE pm.privateChat = :chat AND pm.sender != :user")
     void markAsRead(@Param("chat") PrivateChat chat, @Param("user") User user);

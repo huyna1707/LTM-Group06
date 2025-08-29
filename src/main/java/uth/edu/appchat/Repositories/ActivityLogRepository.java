@@ -12,19 +12,19 @@ import java.util.List;
 
 @Repository
 public interface ActivityLogRepository extends JpaRepository<ActivityLog, Long> {
-    
+
     // Tìm log theo user
     List<ActivityLog> findByUser(User user);
-    
+
     // Tìm log theo action
     List<ActivityLog> findByAction(String action);
-    
+
     // Tìm log của user trong khoảng thời gian
     @Query("SELECT al FROM ActivityLog al WHERE al.user = :user AND al.createdAt BETWEEN :startDate AND :endDate ORDER BY al.createdAt DESC")
-    List<ActivityLog> findByUserAndDateRange(@Param("user") User user, 
-                                           @Param("startDate") LocalDateTime startDate, 
-                                           @Param("endDate") LocalDateTime endDate);
-    
+    List<ActivityLog> findByUserAndDateRange(@Param("user") User user,
+                                             @Param("startDate") LocalDateTime startDate,
+                                             @Param("endDate") LocalDateTime endDate);
+
     // Lấy log gần nhất của user
     @Query("SELECT al FROM ActivityLog al WHERE al.user = :user ORDER BY al.createdAt DESC LIMIT 10")
     List<ActivityLog> findRecentActivities(@Param("user") User user);

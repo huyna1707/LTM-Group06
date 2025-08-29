@@ -6,113 +6,34 @@
     <title>Đăng Ký - Professional Registration</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-
-        .gradient-bg {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-
+        body { font-family: 'Inter', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
         .glass-effect {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
-
         .input-focus:focus {
             transform: translateY(-2px);
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
         }
-
         .btn-hover:hover {
             transform: translateY(-2px);
             box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4);
         }
-
-        .floating-shapes {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            z-index: 0;
-        }
-
-        .shape {
-            position: absolute;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.1);
-            animation: float 6s ease-in-out infinite;
-        }
-
-        .shape:nth-child(1) {
-            width: 80px;
-            height: 80px;
-            top: 20%;
-            left: 10%;
-            animation-delay: 0s;
-        }
-
-        .shape:nth-child(2) {
-            width: 120px;
-            height: 120px;
-            top: 60%;
-            right: 10%;
-            animation-delay: 2s;
-        }
-
-        .shape:nth-child(3) {
-            width: 60px;
-            height: 60px;
-            bottom: 20%;
-            left: 20%;
-            animation-delay: 4s;
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0px) rotate(0deg); }
-            50% { transform: translateY(-20px) rotate(180deg); }
-        }
-
-        .slide-in {
-            animation: slideIn 0.8s ease-out;
-        }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .password-strength {
-            height: 4px;
-            border-radius: 2px;
-            transition: all 0.3s ease;
-        }
-
-        .strength-weak { background-color: #ef4444; width: 33%; }
-        .strength-medium { background-color: #f59e0b; width: 66%; }
-        .strength-strong { background-color: #10b981; width: 100%; }
-
-        .error-message {
-            color: #ef4444;
-            font-size: 0.875rem;
-            margin-top: 0.25rem;
-        }
-
-        .success-message {
-            color: #10b981;
-            font-size: 0.875rem;
-            margin-top: 0.25rem;
-        }
+        .floating-shapes { position: absolute; width: 100%; height: 100%; overflow: hidden; z-index: 0; }
+        .shape { position: absolute; border-radius: 50%; background: rgba(255, 255, 255, 0.1); animation: float 6s ease-in-out infinite; }
+        .shape:nth-child(1) { width: 80px; height: 80px; top: 20%; left: 10%; animation-delay: 0s; }
+        .shape:nth-child(2) { width: 120px; height: 120px; top: 60%; right: 10%; animation-delay: 2s; }
+        .shape:nth-child(3) { width: 60px; height: 60px; bottom: 20%; left: 20%; animation-delay: 4s; }
+        @keyframes float { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-20px) rotate(180deg); } }
+        .slide-in { animation: slideIn 0.8s ease-out; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        .error-message { color: #ef4444; font-size: 0.875rem; margin-top: 0.25rem; }
+        .success-message { color: #10b981; font-size: 0.875rem; margin-top: 0.25rem; }
     </style>
 </head>
 <body class="gradient-bg min-h-screen flex items-center justify-center p-4 relative">
@@ -125,7 +46,6 @@
 
 <!-- Registration Card -->
 <div class="glass-effect rounded-3xl shadow-2xl p-8 w-full max-w-lg relative z-10 slide-in">
-    <!-- Header -->
     <div class="text-center mb-8">
         <div class="w-16 h-16 bg-gradient-to-r from-green-500 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
             <i class="fas fa-user-plus text-white text-2xl"></i>
@@ -134,282 +54,89 @@
         <p class="text-gray-600">Điền thông tin để bắt đầu</p>
     </div>
 
-    <!-- Registration Form -->
-    <form method="POST"
-          th:action="@{/signup}"
-          class="space-y-6"
-          th:object="${form}">
-        <input type="hidden" th:if="${_csrf != null}"
-               th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
-        <!-- Username -->
+    <form method="POST" th:action="@{/signup}" th:object="${form}" class="space-y-6">
+        <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+
+        <div th:if="${#fields.hasErrors()}" class="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700">
+            <ul class="list-disc list-inside">
+                <li th:each="e: ${#fields.errors('*')}" th:text="${e}"></li>
+            </ul>
+        </div>
+
         <div class="relative">
             <label class="block text-sm font-medium text-gray-700 mb-2">Tên đăng nhập</label>
-            <div class="relative">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <i class="fas fa-user text-gray-400"></i>
-                </div>
-                <input
-                        type="text"
-                        id="username"
-                        required
-                        class="input-focus w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-white/80"
-                        placeholder="Chọn tên đăng nhập"
-                        onblur="validateUsername()" th:field="*{username}"
-                >
-                <div id="usernameError" class="error-message hidden"></div>
-                <div id="usernameSuccess" class="success-message hidden"></div>
-            </div>
+            <input type="text" th:field="*{username}" class="input-focus w-full py-3 px-4 border rounded-xl bg-white/80" placeholder="Tên đăng nhập" required />
+            <div class="error-message" th:if="${#fields.hasErrors('username')}" th:errors="*{username}"></div>
         </div>
-        <!-- Email -->
+
         <div class="relative">
             <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
-            <div class="relative">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <i class="fas fa-envelope text-gray-400"></i>
-                </div>
-                <input type="email"
-                       id="email"
-                       required
-                       class="input-focus w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-white/80"
-                       placeholder="Nhập email"
-                       th:field="*{email}">
-            </div>
+            <input type="email" th:field="*{email}" class="input-focus w-full py-3 px-4 border rounded-xl bg-white/80" placeholder="Email" required />
+            <div class="error-message" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></div>
         </div>
-        <!-- Password -->
+
         <div class="relative">
             <label class="block text-sm font-medium text-gray-700 mb-2">Mật khẩu</label>
-            <div class="relative">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <i class="fas fa-lock text-gray-400"></i>
-                </div>
-                <input
-                        type="password"
-                        id="password"
-                        required
-                        class="input-focus w-full pl-10 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-white/80"
-                        placeholder="Tạo mật khẩu mạnh"
-                        oninput="checkPasswordStrength()" th:field="*{password}"
-                >
-                <button
-                        type="button"
-                        onclick="togglePassword('password', 'toggleIcon1')"
-                        class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                    <i class="fas fa-eye" id="toggleIcon1"></i>
-                </button>
-            </div>
-            <!-- Password Strength Indicator -->
-            <div class="mt-2">
-                <div class="bg-gray-200 rounded-full h-1">
-                    <div id="passwordStrength" class="password-strength"></div>
-                </div>
-                <div id="passwordStrengthText" class="text-xs text-gray-500 mt-1"></div>
-            </div>
+            <input type="password" th:field="*{password}" class="input-focus w-full py-3 px-4 border rounded-xl bg-white/80" placeholder="Mật khẩu" required />
+            <div class="error-message" th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></div>
         </div>
-
-        <!-- Confirm Password -->
         <div class="relative">
             <label class="block text-sm font-medium text-gray-700 mb-2">Xác nhận mật khẩu</label>
-            <div class="relative">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <i class="fas fa-lock text-gray-400"></i>
-                </div>
-                <input
-                        type="password"
-                        id="confirmPassword"
-                        name="confirmPassword"
-                        required
-                        class="input-focus w-full pl-10 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-white/80"
-                        placeholder="Nhập lại mật khẩu"
-                        onblur="validatePasswordMatch()"
-                >
-                <button
-                        type="button"
-                        onclick="togglePassword('confirmPassword', 'toggleIcon2')"
-                        class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                    <i class="fas fa-eye" id="toggleIcon2"></i>
-                </button>
-            </div>
-            <div id="confirmPasswordError" class="error-message hidden"></div>
-            <div id="confirmPasswordSuccess" class="success-message hidden"></div>
+            <input type="password" th:field="*{confirmPassword}" class="input-focus w-full py-3 px-4 border rounded-xl bg-white/80" placeholder="Nhập lại mật khẩu" required />
+            <div class="error-message" th:if="${#fields.hasErrors('confirmPassword')}" th:errors="*{confirmPassword}"></div>
         </div>
 
-        <!-- Terms and Conditions -->
         <div class="flex items-start space-x-3">
-            <input
-                    type="checkbox"
-                    id="terms"
-                    required
-                    class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mt-1"
-            >
+            <input type="checkbox" id="terms" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mt-1" required>
             <label for="terms" class="text-sm text-gray-600 leading-relaxed">
-                Tôi đồng ý với
-                <a href="#" class="text-blue-600 hover:text-blue-800 font-medium">Điều khoản sử dụng</a>
-                và
-                <a href="#" class="text-blue-600 hover:text-blue-800 font-medium">Chính sách bảo mật</a>
+                Tôi đồng ý với <a href="#" class="text-blue-600 hover:text-blue-800 font-medium">Điều khoản</a> và <a href="#" class="text-blue-600 hover:text-blue-800 font-medium">Chính sách</a>
             </label>
         </div>
 
-        <!-- Register Button -->
-        <button
-                type="submit"
-                id="registerBtn"
-                class="btn-hover w-full bg-gradient-to-r from-green-500 to-blue-600 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-300 flex items-center justify-center space-x-2 shadow-lg"
-        >
-            <span>Tạo tài khoản</span>
-            <i class="fas fa-user-plus"></i>
+        <!-- Nút submit -->
+        <button type="submit" class="btn-hover w-full bg-gradient-to-r from-green-500 to-blue-600 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-300 flex items-center justify-center space-x-2 shadow-lg">
+            <span>Đăng ký</span>
         </button>
+
+        <!-- Thành công -->
+        <div id="signupSuccess" class="hidden" th:if="${success}" th:data-msg="${success}"></div>
+        <!-- Thất bại -->
+        <div id="serverErrors" class="hidden" th:if="${#fields.hasErrors()}">
+            <ul>
+                <li th:each="e : ${#fields.errors('*')}" th:text="${e}"></li>
+            </ul>
+        </div>
     </form>
 
-    <!-- Divider -->
-
-    <!-- Social Registration -->
-
-    <!-- Login Link -->
     <div class="mt-8 text-center">
         <p class="text-gray-600">
-            Đã có tài khoản?
-            <a href="/login" class="text-blue-600 hover:text-blue-800 font-semibold transition-colors">
-                Đăng nhập ngay
-            </a>
+            Đã có tài khoản? <a href="/login" class="text-blue-600 hover:text-blue-800 font-semibold">Đăng nhập ngay</a>
         </p>
     </div>
 </div>
 
 <script>
-    function togglePassword(inputId, iconId) {
-        const passwordInput = document.getElementById(inputId);
-        const toggleIcon = document.getElementById(iconId);
-
-        if (passwordInput.type === 'password') {
-            passwordInput.type = 'text';
-            toggleIcon.classList.remove('fa-eye');
-            toggleIcon.classList.add('fa-eye-slash');
-        } else {
-            passwordInput.type = 'password';
-            toggleIcon.classList.remove('fa-eye-slash');
-            toggleIcon.classList.add('fa-eye');
-        }
-    }
-
-    function validateUsername() {
-        const username = document.getElementById('username').value;
-        const errorDiv = document.getElementById('usernameError');
-        const successDiv = document.getElementById('usernameSuccess');
-
-        if (username.length < 3) {
-            errorDiv.textContent = 'Tên đăng nhập phải có ít nhất 3 ký tự';
-            errorDiv.classList.remove('hidden');
-            successDiv.classList.add('hidden');
-            return false;
-        } else if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-            errorDiv.textContent = 'Tên đăng nhập chỉ được chứa chữ, số và dấu gạch dưới';
-            errorDiv.classList.remove('hidden');
-            successDiv.classList.add('hidden');
-            return false;
-        } else {
-            errorDiv.classList.add('hidden');
-            successDiv.textContent = 'Tên đăng nhập khả dụng';
-            successDiv.classList.remove('hidden');
-            return true;
-        }
-    }
-
-    function checkPasswordStrength() {
-        const password = document.getElementById('password').value;
-        const strengthBar = document.getElementById('passwordStrength');
-        const strengthText = document.getElementById('passwordStrengthText');
-
-        let strength = 0;
-        let feedback = '';
-
-        if (password.length >= 8) strength++;
-        if (/[a-z]/.test(password)) strength++;
-        if (/[A-Z]/.test(password)) strength++;
-        if (/[0-9]/.test(password)) strength++;
-        if (/[^A-Za-z0-9]/.test(password)) strength++;
-
-        strengthBar.className = 'password-strength';
-
-        if (strength < 3) {
-            strengthBar.classList.add('strength-weak');
-            feedback = 'Mật khẩu yếu';
-        } else if (strength < 5) {
-            strengthBar.classList.add('strength-medium');
-            feedback = 'Mật khẩu trung bình';
-        } else {
-            strengthBar.classList.add('strength-strong');
-            feedback = 'Mật khẩu mạnh';
-        }
-
-        strengthText.textContent = feedback;
-    }
-
-    function validatePasswordMatch() {
-        const password = document.getElementById('password').value;
-        const confirmPassword = document.getElementById('confirmPassword').value;
-        const errorDiv = document.getElementById('confirmPasswordError');
-        const successDiv = document.getElementById('confirmPasswordSuccess');
-
-        if (password !== confirmPassword) {
-            errorDiv.textContent = 'Mật khẩu xác nhận không khớp';
-            errorDiv.classList.remove('hidden');
-            successDiv.classList.add('hidden');
-            return false;
-        } else {
-            errorDiv.classList.add('hidden');
-            successDiv.textContent = 'Mật khẩu khớp';
-            successDiv.classList.remove('hidden');
-            return true;
-        }
-    }
-
-    function handleRegistration(event) {
-        event.preventDefault();
-
-        // Validate all fields
-        const isValid = validateUsername() &&
-            validatePasswordMatch();
-
-        if (!isValid) {
-            alert('Vui lòng kiểm tra lại thông tin!');
-            return;
-        }
-
-        // Loading effect
-        const button = document.getElementById('registerBtn');
-        const originalContent = button.innerHTML;
-
-        button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Đang tạo tài khoản...';
-        button.disabled = true;
-
-        // Simulate registration process
-        setTimeout(() => {
-            alert('Đăng ký thành công!');
-            button.innerHTML = originalContent;
-            button.disabled = false;
-
-            // Reset form
-            event.target.reset();
-            document.querySelectorAll('.success-message, .error-message').forEach(el => {
-                el.classList.add('hidden');
+    (function () {
+        const successBox = document.getElementById('signupSuccess');
+        if (successBox) {
+            Swal.fire({
+                icon: 'success',
+                title: 'Thành công!',
+                text: successBox.dataset.msg,
+                confirmButtonColor: '#10b981'
             });
-            document.getElementById('passwordStrength').className = 'password-strength';
-            document.getElementById('passwordStrengthText').textContent = '';
-        }, 3000);
-    }
+        }
 
-    // Add focus effects
-    document.querySelectorAll('input').forEach(input => {
-        input.addEventListener('focus', function() {
-            this.parentElement.classList.add('scale-105');
-        });
-
-        input.addEventListener('blur', function() {
-            this.parentElement.classList.remove('scale-105');
-        });
-    });
+        const errorBox = document.getElementById('serverErrors');
+        if (errorBox) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Đăng ký thất bại',
+                html: errorBox.innerHTML,
+                confirmButtonColor: '#ef4444'
+            });
+        }
+    })();
 </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'966b2f7777f4fe8b',t:'MTc1Mzc3NzEwNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
