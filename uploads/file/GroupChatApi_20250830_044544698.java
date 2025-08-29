@@ -3,7 +3,6 @@ package uth.edu.appchat.Api;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import uth.edu.appchat.Dtos.AttachmentDTO;
@@ -21,7 +20,6 @@ import uth.edu.appchat.Repositories.GroupMessageRepository;
 import uth.edu.appchat.Repositories.UserRepository;
 import uth.edu.appchat.Services.GroupChatService;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -37,12 +35,18 @@ public class GroupChatApi {
     private final GroupChatRepository groupChatRepo;
     private final GroupMessageRepository groupMessageRepo;
 
+    // ===== Helpers ============================================================
+
     private UserDTO toUserDto(User u) {
         if (u == null) return null;
         String fullName = Optional.ofNullable(u.getFullName()).orElse(u.getUsername());
         return new UserDTO(u.getId(), u.getUsername(), fullName);
     }
 
+    /** Convert entity -> DTO CHUẨN khớp format GET:
+     *  - TEXT:  content có, attachments rỗng
+     *  - IMAGE/FILE: content = "", attachments = [{url,type,name}]
+     */
     private GroupMessageDTO toDto(GroupMessage gm) {
         UserDTO sender = toUserDto(gm.getSender());
         String content = (gm.getMessageType() == GroupMessage.MessageType.TEXT)
@@ -72,7 +76,6 @@ public class GroupChatApi {
         }
         return dto;
     }
-
     @GetMapping("/my-groups")
     public ResponseEntity<List<GroupDTO>> getMyGroups() {
         List<GroupDTO> groups = groupChatService.getMyGroups();
@@ -116,7 +119,7 @@ public class GroupChatApi {
                 } else {
                     m.setAttachments(List.of());
                 }
-                m.setContent(""); // xoá URL khỏi content để FE không in đường dẫn
+                m.setContent("");
             } else {
                 m.setAttachments(List.of());
             }
@@ -125,35 +128,21 @@ public class GroupChatApi {
     }
 
     @PostMapping("/{groupId}/send")
-    public ResponseEntity<GroupMessageDTO> sendGroupMessage(
-            @PathVariable Long groupId,
-            @RequestBody MessageContentDTO body
-    ) {
-        // Lấy username hiện tại
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        String meUsername = (auth != null) ? auth.getName() : null;
-
-        // Chuẩn hóa input
-        String content = Optional.ofNullable(body.getContent()).orElse("").trim();
-        List<AttachmentDTO> atts = (body.getAttachments() == null) ? List.of() : body.getAttachments();
-
-        // Không cho gửi rỗng (không text + không file)
-        if (content.isEmpty() && atts.isEmpty()) {
+    public ResponseEntity<GroupMessageDTO> sendGroupMessage(@PathVariable Long groupId,
+                                                            @RequestBody MessageContentDTO contentDTO) {
+        String content = Optional.ofNullable(contentDTO).map(MessageContentDTO::getContent).orElse("").trim();
+        List<AttachmentDTO> atts = Optional.ofNullable(contentDTO).map(MessageContentDTO::getAttachments).orElse(List.of());
+        if (content.isBlank() && atts.isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
 
-        // Tìm group + user
-        GroupChat group = groupChatRepo.findById(groupId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy group: " + groupId));
+        String meUsername = SecurityContextHolder.getContext().getAuthentication().getName();
         User me = userRepo.findByUsername(meUsername)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy user: " + meUsername));
-
-        // Danh sách thành viên để broadcast
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        GroupChat group = groupChatRepo.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("Group not found"));
         List<MemberNicknameDTO> members = groupChatService.getMembersWithNickname(groupId);
-
         GroupMessageDTO lastDto = null;
-
-        // 1) Lưu TEXT (nếu có) -> phát 1 event
         if (!content.isBlank()) {
             GroupMessage text = new GroupMessage();
             text.setGroupChat(group);
@@ -173,22 +162,18 @@ public class GroupChatApi {
                 }
             }
         }
-
-        // 2) Lưu ATTACHMENTS (nếu có) -> mỗi file là 1 message, nhưng vẫn 1 lần gửi từ phía người dùng
         for (AttachmentDTO a : atts) {
             String url = Optional.ofNullable(a.getUrl()).orElse("").trim();
             if (url.isEmpty()) continue;
-
-            // Map loại file
-            String t = Optional.ofNullable(a.getType()).orElse("").toLowerCase();
             GroupMessage.MessageType mt;
-            if ("image".equals(t))      mt = GroupMessage.MessageType.IMAGE;
-            else /* "video" hoặc khác*/ mt = GroupMessage.MessageType.FILE; // nếu có ENUM VIDEO thì đổi sang VIDEO
+            String t = Optional.ofNullable(a.getType()).orElse("").toLowerCase();
+            if ("image".equals(t)) mt = GroupMessage.MessageType.IMAGE;
+            else                   mt = GroupMessage.MessageType.FILE;
 
             GroupMessage gm = new GroupMessage();
             gm.setGroupChat(group);
             gm.setSender(me);
-            gm.setContent(url);                // content lưu URL file
+            gm.setContent(url);
             gm.setMessageType(mt);
             gm.setCreatedAt(LocalDateTime.now());
             groupMessageRepo.save(gm);
@@ -204,14 +189,11 @@ public class GroupChatApi {
             }
         }
 
-        // Trả về message cuối cùng (hoặc tạo stub nếu chỉ có text)
-        return ResponseEntity.ok(
-                lastDto != null ? lastDto
-                        : new GroupMessageDTO(null, groupId, toUserDto(me), content, LocalDateTime.now())
-        );
+        // trả về message cuối cùng đã gửi (nếu FE cần)
+        return ResponseEntity.ok(lastDto != null ? lastDto : new GroupMessageDTO(
+                null, groupId, toUserDto(me), content, LocalDateTime.now()
+        ));
     }
-
-
 
     @GetMapping("/{groupId}/members-with-nickname")
     public List<MemberNicknameDTO> members(@PathVariable Long groupId) {

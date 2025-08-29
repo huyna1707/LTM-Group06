@@ -24,6 +24,6 @@ public class LoginController {
             model.addAttribute("registeredMessage", "Đăng ký thành công! Vui lòng đăng nhập.");
         }
 
-        return "login";
+        return "login"; // login.html (Thymeleaf)
     }
 }
