@@ -9,6 +9,7 @@ import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -49,11 +50,14 @@ public class SecurityConfig {
         provider.setPasswordEncoder(pe);
         return new ProviderManager(provider);
     }
-
+    @Bean
+    public WebSecurityCustomizer webSecurityCustomizer() {
+        return web -> web.ignoring().requestMatchers("/uploads/**");
+    }
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                // Bật CSRF và dùng CookieCsrfTokenRepository để Thymeleaf/JS đọc được token từ cookie XSRF-TOKEN
+
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 )
@@ -62,8 +66,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/", "/home", "/login", "/signup", "/register",
                                 "/css/**", "/js/**", "/images/**", "/webjars/**").permitAll()
+                        .requestMatchers("/uploads/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/signup").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
+                        .requestMatchers(HttpMethod.POST, "api/upload").permitAll()
                         .anyRequest().authenticated()
                 )
 
@@ -76,7 +82,7 @@ public class SecurityConfig {
                         .loginProcessingUrl("/login")       // POST /login để Spring xử lý xác thực
                         .usernameParameter("username")      // tên input trong <form> (mặc định "username")
                         .passwordParameter("password")      // tên input trong <form> (mặc định "password")
-                        .defaultSuccessUrl("/", false)      // về trang trước đó nếu có SavedRequest; đặt true để luôn về "/"
+                        .defaultSuccessUrl("/", true)      // về trang trước đó nếu có SavedRequest; đặt true để luôn về "/"
                         .failureUrl("/login?error=true")
                         .permitAll()
                 )
