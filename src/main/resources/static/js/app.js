@@ -428,6 +428,72 @@ function updateStreakBadge(count, active) {
   }
 }
 
+// Restore streak UI helper
+function canShowRestoreButton(lastDateStr) {
+  if (!lastDateStr) return false;
+  try {
+    const last = new Date(lastDateStr + 'T00:00:00');
+    const today = new Date();
+    // Normalize to local date only
+    const days = Math.floor((new Date(today.getFullYear(), today.getMonth(), today.getDate()) - new Date(last.getFullYear(), last.getMonth(), last.getDate())) / (1000*60*60*24));
+    // show button only when gap == 2 (missed exactly 1 day) and not more than 2 days
+    return days === 2;
+  } catch (e) { return false; }
+}
+
+function updateRestoreButtonUI(used) {
+  const btn = document.getElementById('restoreStreakBtn');
+  if (!btn) return;
+  const usedNum = typeof used === 'number' ? used : (used == null ? 0 : Number(used));
+  btn.textContent = `Khôi phục (${usedNum}/2)`;
+  btn.disabled = usedNum >= 2;
+}
+
+async function restoreStreak() {
+  if (!currentChat) return;
+  const btn = document.getElementById('restoreStreakBtn');
+  if (btn) btn.disabled = true;
+  try {
+    let url = null;
+    if (currentChat.type === 'private') url = `/api/private-chat/${currentChat.id}/restore-streak`;
+    else if (currentChat.type === 'group') url = `/api/groups/${currentChat.id}/restore-streak`;
+    if (!url) throw new Error('Không hỗ trợ khôi phục cho loại chat này');
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {}) }
+    });
+    const data = await res.json().catch(()=>({}));
+    if (!res.ok) {
+      const msg = data?.error || data?.message || 'Không thể khôi phục';
+      showErrorMessage(msg);
+      return;
+    }
+    if (data?.restored) {
+      showSuccessMessage(`Khôi phục thành công — streak: ${data.streakCount || 0}`);
+      updateStreakBadge(data.streakCount || 0, true);
+      // refresh sidebar and partner/group info
+      scheduleSidebarRefresh();
+      // update button UI (used incremented) and hide after restore
+      if (btn) {
+        updateRestoreButtonUI(data.used ?? data.streakRecoveryUsed ?? 0);
+        btn.classList.add('hidden');
+      }
+    } else {
+      showErrorMessage('Khôi phục thất bại');
+    }
+  } catch (e) {
+    console.error(e);
+    showErrorMessage('Lỗi khi gọi API khôi phục');
+  } finally {
+    if (btn) btn.disabled = false;
+    closeChatSettingsPanel();
+  }
+}
+
+// Hook restore button
+document.getElementById('restoreStreakBtn')?.addEventListener('click', restoreStreak);
+
 /* ========================================================
    SWITCH CHAT
 ======================================================== */
@@ -485,6 +551,14 @@ async function switchToPrivateChat(friend) {
             }
           }
           updateStreakBadge(streak, active);
+          // update restore button UI (text + disabled) and visibility
+          const restoreBtn = document.getElementById('restoreStreakBtn');
+          if (restoreBtn) {
+            const used = partner?.used ?? partner?.streakRecoveryUsed ?? 0;
+            updateRestoreButtonUI(used);
+            if (canShowRestoreButton(partner.streakLastDate ?? partner.streak_last_date)) restoreBtn.classList.remove('hidden');
+            else restoreBtn.classList.add('hidden');
+          }
         }
       } catch (e) { console.error('updateStreakBadge (private switch fetch) error', e); }
 
@@ -513,6 +587,13 @@ function switchToGroupChat(group) {
     const streak = group ? (group.streakCount ?? group.streak_count ?? 0) : 0;
     const active = group ? !!(group.sufficientSendersToday || group.sufficient_senders_today) : false;
     updateStreakBadge(streak, active);
+    const restoreBtn = document.getElementById('restoreStreakBtn');
+    if (restoreBtn) {
+      const used = group?.used ?? group?.streakRecoveryUsed ?? 0;
+      updateRestoreButtonUI(used);
+      if (canShowRestoreButton(group?.streakLastDate ?? group?.streak_last_date)) restoreBtn.classList.remove('hidden');
+      else restoreBtn.classList.add('hidden');
+    }
   } catch (e) { console.error('updateStreakBadge (group switch) error', e); }
 }
 
@@ -1608,6 +1689,13 @@ async function loadPrivatePartnerNickname(privateChatId) {
         }
       }
       updateStreakBadge(streak, active);
+      const restoreBtn = document.getElementById('restoreStreakBtn');
+      if (restoreBtn) {
+        const used = partner?.used ?? partner?.streakRecoveryUsed ?? 0;
+        updateRestoreButtonUI(used);
+        if (canShowRestoreButton(partner.streakLastDate ?? partner.streak_last_date)) restoreBtn.classList.remove('hidden');
+        else restoreBtn.classList.add('hidden');
+      }
     } catch (err) { console.error('streak update error', err); }
   } catch (e) {
     console.error(e);

@@ -36,22 +36,26 @@ public class GroupChatApi {
             var g = groupChatService.getGroupById(groupId);
             java.time.LocalDate today = java.time.LocalDate.now();
             java.time.LocalDate last = g.getStreakLastDate();
-            if (last == null) { g.setStreakLastDate(today); g.setStreakCount(1); }
-            else {
-                long gap = java.time.temporal.ChronoUnit.DAYS.between(last, today);
-                if (gap <= 1) return ResponseEntity.badRequest().body(Map.of("error","Không cần khôi phục"));
-                if (gap > 2) return ResponseEntity.badRequest().body(Map.of("error","Khoảng cách quá lớn, không thể khôi phục"));
-                int m = today.getMonthValue(), y = today.getYear();
-                if (g.getStreakRecoveryMonth() == null || g.getStreakRecoveryYear() == null || g.getStreakRecoveryMonth()!=m || g.getStreakRecoveryYear()!=y) {
-                    g.setStreakRecoveryMonth(m); g.setStreakRecoveryYear(y); g.setStreakRecoveryUsed(0);
-                }
-                Integer used = g.getStreakRecoveryUsed() == null ? 0 : g.getStreakRecoveryUsed();
-                if (used >= 2) return ResponseEntity.badRequest().body(Map.of("error","Đã dùng hết lượt khôi phục trong tháng"));
-                g.setStreakRecoveryUsed(used+1);
-                g.setStreakLastDate(today.minusDays(1));
+            if (last == null) {
+                return ResponseEntity.badRequest().body(Map.of("error","Không có streak để khôi phục"));
             }
+            long gap = java.time.temporal.ChronoUnit.DAYS.between(last, today);
+            if (gap <= 1) return ResponseEntity.badRequest().body(Map.of("error","Không cần khôi phục"));
+            if (gap != 2) return ResponseEntity.badRequest().body(Map.of("error","Chỉ có thể khôi phục khi bỏ sót đúng 1 ngày"));
+
+            int m = today.getMonthValue(), y = today.getYear();
+            if (g.getStreakRecoveryMonth() == null || g.getStreakRecoveryYear() == null || g.getStreakRecoveryMonth()!=m || g.getStreakRecoveryYear()!=y) {
+                g.setStreakRecoveryMonth(m); g.setStreakRecoveryYear(y); g.setStreakRecoveryUsed(0);
+            }
+            Integer used = g.getStreakRecoveryUsed() == null ? 0 : g.getStreakRecoveryUsed();
+            if (used >= 2) return ResponseEntity.badRequest().body(Map.of("error","Đã dùng hết lượt khôi phục trong tháng"));
+
+            g.setStreakRecoveryUsed(used+1);
+            g.setStreakLastDate(today.minusDays(1));
+            Integer cnt = g.getStreakCount() == null ? 0 : g.getStreakCount();
+            g.setStreakCount(Math.max(1, cnt) + 1);
             groupChatService.saveGroup(g);
-            return ResponseEntity.ok(Map.of("restored", true, "streakCount", g.getStreakCount()));
+            return ResponseEntity.ok(Map.of("restored", true, "streakCount", g.getStreakCount(), "used", g.getStreakRecoveryUsed()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

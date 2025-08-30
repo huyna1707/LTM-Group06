@@ -153,14 +153,14 @@ public class PrivateChatApi {
                     .orElseThrow(() -> new RuntimeException("Chat not found"));
             if (!chat.containsUser(currentUser)) return ResponseEntity.status(403).body(Map.of("error","Access denied"));
             User partner = chat.getOtherUser(currentUser);
-            Map<String, Object> out = Map.of(
-                    "userId", partner.getId(),
-                    "username", partner.getUsername(),
-                    "fullName", partner.getFullName(),
-                    "nickname", chat.getNickname(),
-                    "streakCount", chat.getStreakCount() == null ? 0 : chat.getStreakCount(),
-                    "streakLastDate", chat.getStreakLastDate() != null ? chat.getStreakLastDate().toString() : null
-            );
+            java.util.Map<String, Object> out = new java.util.HashMap<>();
+            out.put("userId", partner.getId());
+            out.put("username", partner.getUsername());
+            out.put("fullName", partner.getFullName() != null ? partner.getFullName() : partner.getUsername());
+            out.put("nickname", chat.getNickname());
+            out.put("streakCount", chat.getStreakCount() == null ? 0 : chat.getStreakCount());
+            out.put("streakLastDate", chat.getStreakLastDate() != null ? chat.getStreakLastDate().toString() : null);
+            out.put("used", chat.getStreakRecoveryUsed() == null ? 0 : chat.getStreakRecoveryUsed());
             return ResponseEntity.ok(out);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -179,19 +179,15 @@ public class PrivateChatApi {
             java.time.LocalDate today = java.time.LocalDate.now();
             java.time.LocalDate last = chat.getStreakLastDate();
             if (last == null) {
-                chat.setStreakLastDate(today);
-                chat.setStreakCount(1);
-                chat.setStreakRecoveryUsed(0);
-                privateChatRepository.save(chat);
-                return ResponseEntity.ok(Map.of("restored", true, "streakCount", chat.getStreakCount()));
+                // No previous streak to restore
+                return ResponseEntity.badRequest().body(Map.of("error","Không có streak để khôi phục"));
             }
 
             long gap = java.time.temporal.ChronoUnit.DAYS.between(last, today);
             if (gap <= 1) {
                 return ResponseEntity.badRequest().body(Map.of("error","Không cần khôi phục"));
             }
-            // only allow if exactly missed 1 day
-            if (gap > 2) return ResponseEntity.badRequest().body(Map.of("error","Khoảng cách quá lớn, không thể khôi phục"));
+            // allow restore when gap >= 2; each restore covers one missed day (advance last date by 1)
 
             // check monthly usage
             int m = today.getMonthValue(), y = today.getYear();
@@ -201,9 +197,12 @@ public class PrivateChatApi {
             Integer used = chat.getStreakRecoveryUsed() == null ? 0 : chat.getStreakRecoveryUsed();
             if (used >= 2) return ResponseEntity.badRequest().body(Map.of("error","Đã dùng hết lượt khôi phục trong tháng"));
 
+            // perform restore: advance lastDate to yesterday and increment streakCount immediately
             chat.setStreakRecoveryUsed(used+1);
-            // set last date to yesterday so streak appears continuous
             chat.setStreakLastDate(today.minusDays(1));
+            Integer cnt = chat.getStreakCount() == null ? 0 : chat.getStreakCount();
+            // increment streak by 1 (if previously 0 -> becomes 1)
+            chat.setStreakCount(cnt + 1);
             privateChatRepository.save(chat);
             return ResponseEntity.ok(Map.of("restored", true, "streakCount", chat.getStreakCount(), "used", chat.getStreakRecoveryUsed()));
         } catch (Exception e) {

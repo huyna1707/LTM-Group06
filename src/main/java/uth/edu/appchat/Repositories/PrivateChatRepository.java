@@ -30,4 +30,12 @@ public interface PrivateChatRepository extends JpaRepository<PrivateChat, Long> 
     @Query("SELECT pc FROM PrivateChat pc WHERE pc.user1 = :user OR pc.user2 = :user " +
             "ORDER BY pc.lastMessageAt DESC")
     List<PrivateChat> findByUser(@Param("user") User user);
+
+    // Find chats whose streakLastDate is before given cutoff (expired)
+    @Query("SELECT pc FROM PrivateChat pc WHERE pc.streakLastDate IS NOT NULL AND pc.streakLastDate < :cutoff")
+    List<PrivateChat> findByStreakLastDateBefore(@Param("cutoff") java.time.LocalDate cutoff);
+
+    // Find chats where recovery month/year differ from given month/year
+    @Query("SELECT pc FROM PrivateChat pc WHERE pc.streakRecoveryMonth IS NULL OR pc.streakRecoveryYear IS NULL OR pc.streakRecoveryMonth <> :month OR pc.streakRecoveryYear <> :year")
+    List<PrivateChat> findByRecoveryMonthNot(@Param("month") Integer month, @Param("year") Integer year);
 }

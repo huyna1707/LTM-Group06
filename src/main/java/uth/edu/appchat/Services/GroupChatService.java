@@ -74,6 +74,7 @@ public class GroupChatService {
                 .map(group -> {
                     GroupDTO dto = new GroupDTO(group.getId(), group.getName(), group.getMemberCount(), group.getStreakCount());
                     dto.setStreakLastDate(group.getStreakLastDate());
+                    dto.setStreakRecoveryUsed(group.getStreakRecoveryUsed() == null ? 0 : group.getStreakRecoveryUsed());
                     return dto;
                 })
                 .collect(Collectors.toList());
