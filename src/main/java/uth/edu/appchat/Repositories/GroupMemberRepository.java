@@ -2,7 +2,7 @@ package uth.edu.appchat.Repositories;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;   // <-- nhớ import Param
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import uth.edu.appchat.Models.GroupChat;
 import uth.edu.appchat.Models.GroupMember;
@@ -12,7 +12,6 @@ import java.util.Optional;
 
 @Repository
 public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> {
-
 
     @Query("""
            SELECT gm.groupChat
@@ -24,9 +23,6 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
     boolean existsByGroupChatIdAndUserId(Long groupChatId, Long userId);
     boolean existsByGroupChatIdAndUserIdAndIsActive(Long groupChatId, Long userId, boolean isActive);
 
-    // === THÊM CHO TÍNH NĂNG BIỆT DANH ===
-
-    // Lấy danh sách thành viên (kèm user) để hiển thị & sửa nickname, tránh N+1
     @Query("""
            SELECT gm
            FROM GroupMember gm
@@ -36,10 +32,17 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
            """)
     List<GroupMember> findByGroupIdWithUser(@Param("groupId") Long groupId);
 
-
-    // Tìm 1 thành viên trong nhóm để cập nhật nickname
     Optional<GroupMember> findByGroupChatIdAndUserId(Long groupId, Long userId);
-    // Trả về danh sách username của các thành viên đang active trong group
+
+    // ====== THÊM MỚI (phục vụ leave/delete) ======
+    Optional<GroupMember> findByGroupChatIdAndUserUsernameAndIsActiveTrue(Long groupChatId, String username);
+
+    long countByGroupChatIdAndIsActiveTrue(Long groupChatId);
+
+    long countByGroupChatIdAndRoleAndIsActiveTrue(Long groupChatId, GroupMember.GroupRole role);
+
+    Optional<GroupMember> findFirstByGroupChatIdAndIsActiveTrueOrderByJoinedAtAsc(Long groupChatId);
+
     @Query("""
        select gm.user.username
        from GroupMember gm

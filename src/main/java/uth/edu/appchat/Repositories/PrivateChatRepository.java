@@ -1,5 +1,6 @@
 package uth.edu.appchat.Repositories;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -30,4 +31,11 @@ public interface PrivateChatRepository extends JpaRepository<PrivateChat, Long> 
     @Query("SELECT pc FROM PrivateChat pc WHERE pc.user1 = :user OR pc.user2 = :user " +
             "ORDER BY pc.lastMessageAt DESC")
     List<PrivateChat> findByUser(@Param("user") User user);
+
+    // Lấy private chat kèm luôn user1, user2
+    @Query("SELECT pc FROM PrivateChat pc " +
+            "LEFT JOIN FETCH pc.user1 " +
+            "LEFT JOIN FETCH pc.user2 " +
+            "WHERE pc.id = :id")
+    Optional<PrivateChat> findWithUsersById(@Param("id") Long id);
 }

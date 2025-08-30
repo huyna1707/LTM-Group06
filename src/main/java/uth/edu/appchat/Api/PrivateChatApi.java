@@ -11,10 +11,14 @@ import uth.edu.appchat.Models.User;
 import uth.edu.appchat.Repositories.PrivateChatRepository;
 import uth.edu.appchat.Repositories.PrivateMessageRepository;
 import uth.edu.appchat.Repositories.UserRepository;
-
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import uth.edu.appchat.Dtos.AttachmentDTO;
+import uth.edu.appchat.Dtos.MessageContentDTO;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @RestController
@@ -25,6 +29,8 @@ public class PrivateChatApi {
     private final PrivateChatRepository privateChatRepository;
     private final PrivateMessageRepository privateMessageRepository;
     private final UserRepository userRepository;
+    private final SimpMessagingTemplate messaging;
+
 
     // Lấy danh sách chat riêng của user hiện tại
     @GetMapping("/my-chats")
@@ -111,8 +117,6 @@ public class PrivateChatApi {
 
             PrivateChat chat = privateChatRepository.findById(chatId)
                     .orElseThrow(() -> new RuntimeException("Chat not found"));
-
-            // Kiểm tra quyền truy cập
             if (!chat.containsUser(currentUser)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Access denied"));
             }
@@ -121,18 +125,40 @@ public class PrivateChatApi {
 
             List<Map<String, Object>> messageList = messages.stream().map(msg -> {
                 User sender = msg.getSender();
-                return Map.of(
-                        "id", msg.getId(),
-                        "content", msg.getContent(),
-                        "sender", Map.of(
-                                "username", sender.getUsername(),
-                                "fullName", sender.getFullName() != null ? sender.getFullName() : sender.getUsername()
-                        ),
-                        "timestamp", msg.getCreatedAt().toString(),
-                        "messageType", msg.getMessageType().toString(),
-                        "isRead", msg.getIsRead() != null ? msg.getIsRead() : false
-                );
+                boolean isText = msg.getMessageType() == PrivateMessage.MessageType.TEXT;
+
+                Map<String, Object> base = new LinkedHashMap<>();
+                base.put("id", msg.getId());
+                base.put("sender", Map.of(
+                        "username", sender.getUsername(),
+                        "fullName", Optional.ofNullable(sender.getFullName()).orElse(sender.getUsername())
+                ));
+                base.put("timestamp", msg.getCreatedAt().toString());
+                base.put("messageType", msg.getMessageType().toString());
+                base.put("isRead", Optional.ofNullable(msg.getIsRead()).orElse(false));
+
+                if (isText) {
+                    base.put("content", Optional.ofNullable(msg.getContent()).orElse(""));
+                    base.put("attachments", List.of());
+                } else {
+                    // Tạo 1 attachment từ URL trong content
+                    String url = Optional.ofNullable(msg.getContent()).orElse("");
+                    String type = switch (msg.getMessageType()) {
+                        case IMAGE -> "image";
+                        case VIDEO -> "video";
+                        default    -> "file";
+                    };
+                    Map<String, Object> att = new LinkedHashMap<>();
+                    att.put("type", type);
+                    att.put("url", url);
+                    att.put("name", url.substring(url.lastIndexOf('/') + 1));
+                    att.put("size", null);
+                    base.put("content", "");
+                    base.put("attachments", List.of(att));
+                }
+                return base;
             }).collect(Collectors.toList());
+
 
             return ResponseEntity.ok(messageList);
         } catch (Exception e) {
@@ -145,54 +171,93 @@ public class PrivateChatApi {
     // Gửi tin nhắn riêng
     @PostMapping("/{chatId}/send")
     public ResponseEntity<?> sendPrivateMessage(@PathVariable Long chatId,
-                                                @RequestBody Map<String, String> request,
+                                                @RequestBody MessageContentDTO req,
                                                 Authentication auth) {
         try {
-            String content = request.get("content");
-            if (content == null || content.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Message content is required"));
+            String content = Optional.ofNullable(req).map(MessageContentDTO::getContent).orElse("").trim();
+            List<AttachmentDTO> atts = Optional.ofNullable(req).map(MessageContentDTO::getAttachments).orElse(List.of());
+            if (content.isBlank() && atts.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Message content or attachments is required"));
             }
 
-            User currentUser = userRepository.findByUsername(auth.getName())
+            User me = userRepository.findByUsername(auth.getName())
                     .orElseThrow(() -> new RuntimeException("User not found"));
-
             PrivateChat chat = privateChatRepository.findById(chatId)
                     .orElseThrow(() -> new RuntimeException("Chat not found"));
 
-            // Kiểm tra quyền truy cập
-            if (!chat.containsUser(currentUser)) {
+            if (!chat.containsUser(me)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Access denied"));
             }
 
-            // Tạo tin nhắn mới
-            PrivateMessage message = new PrivateMessage();
-            message.setPrivateChat(chat);
-            message.setSender(currentUser);
-            message.setContent(content.trim());
-            message.setMessageType(PrivateMessage.MessageType.TEXT);
-            message.setCreatedAt(LocalDateTime.now());
-            message.setIsRead(false);
+            User other = chat.getOtherUser(me);
 
-            message = privateMessageRepository.save(message);
+            if (!content.isBlank()) {
+                PrivateMessage m = new PrivateMessage();
+                m.setPrivateChat(chat);
+                m.setSender(me);
+                m.setContent(content);
+                m.setMessageType(PrivateMessage.MessageType.TEXT);
+                m.setCreatedAt(LocalDateTime.now());
+                m.setIsRead(false);
+                m = privateMessageRepository.save(m);
 
-            // Cập nhật lastMessageAt cho chat
+            }
+            for (AttachmentDTO a : atts) {
+                String url = Optional.ofNullable(a.getUrl()).orElse("").trim();
+                if (url.isEmpty()) continue;
+
+                PrivateMessage.MessageType mt = switch (Optional.ofNullable(a.getType()).orElse("").toLowerCase()) {
+                    case "image" -> PrivateMessage.MessageType.IMAGE;
+                    case "video" -> PrivateMessage.MessageType.VIDEO;
+                    default      -> PrivateMessage.MessageType.FILE;
+                };
+
+                PrivateMessage m = new PrivateMessage();
+                m.setPrivateChat(chat);
+                m.setSender(me);
+                m.setContent(url);
+                m.setMessageType(mt);
+                m.setCreatedAt(LocalDateTime.now());
+                m.setIsRead(false);
+                m = privateMessageRepository.save(m);
+
+                String attType = switch (mt) {
+                    case IMAGE -> "image";
+                    case VIDEO -> "video";
+                    default    -> "file";
+                };
+                String name = url.contains("/") ? url.substring(url.lastIndexOf('/') + 1) : url;
+
+                Map<String, Object> att = new LinkedHashMap<>();
+                att.put("type", attType);
+                att.put("url", url);
+                att.put("name", name);
+                att.put("size", null);
+
+                Map<String, Object> dto = new LinkedHashMap<>();
+                dto.put("id", m.getId());
+                dto.put("chatId", chatId);
+                dto.put("type", "CHAT");
+                dto.put("messageType", attType.toUpperCase());
+                dto.put("sender", Map.of(
+                        "username", me.getUsername(),
+                        "fullName", Optional.ofNullable(me.getFullName()).orElse(me.getUsername())
+                ));
+                dto.put("content", "");
+                dto.put("attachments", List.of(att));
+                dto.put("timestamp", m.getCreatedAt().toString());
+
+                messaging.convertAndSendToUser(other.getUsername(), "/queue/private", dto);
+                messaging.convertAndSendToUser(me.getUsername(),    "/queue/private", dto);
+            }
+
             chat.setLastMessageAt(LocalDateTime.now());
             privateChatRepository.save(chat);
+            return ResponseEntity.ok(Map.of("ok", true));
 
-            return ResponseEntity.ok(Map.of(
-                    "id", message.getId(),
-                    "content", message.getContent(),
-                    "sender", Map.of(
-                            "username", currentUser.getUsername(),
-                            "fullName", currentUser.getFullName() != null ? currentUser.getFullName() : currentUser.getUsername()
-                    ),
-                    "timestamp", message.getCreatedAt().toString(),
-                    "messageType", message.getMessageType().toString()
-            ));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "error", "Failed to send message: " + e.getMessage()
-            ));
+            return ResponseEntity.badRequest().body(Map.of("error", "Failed to send message: " + e.getMessage()));
         }
     }
+
 }
