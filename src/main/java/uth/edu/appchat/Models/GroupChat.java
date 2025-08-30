@@ -44,6 +44,9 @@ public class GroupChat {
             foreignKey=@ForeignKey(name="fk_groupchat_creator"))
     private User createdBy;
 
+    @Column(name = "avatar_url")
+    private String avatarUrl;
+
     @CreationTimestamp
     @Column(name="created_at", nullable=false, updatable=false)
     private LocalDateTime createdAt;

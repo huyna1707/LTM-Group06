@@ -61,11 +61,12 @@ public class GroupChatService {
         }
     }
 
+    // Services/GroupChatService.java
     public List<GroupDTO> getMyGroups() {
         Long userId = getCurrentUserId();
         List<GroupChat> groups = groupMemberRepo.findActiveGroupsByUserId(userId);
         return groups.stream()
-                .map(g -> new GroupDTO(g.getId(), g.getName(), g.getMemberCount()))
+                .map(g -> new GroupDTO(g.getId(), g.getName(), g.getMemberCount(), g.getAvatarUrl()))
                 .collect(Collectors.toList());
     }
 
@@ -338,5 +339,23 @@ public class GroupChatService {
             }
         }
     }
+    @Transactional
+    public void setGroupAvatar(Long groupId, String byUsername, String url) {
+        GroupChat g = groupChatRepo.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy nhóm."));
+        boolean isOwner = g.getCreatedBy() != null && byUsername.equals(g.getCreatedBy().getUsername());
+        boolean isAdmin = groupMemberRepo
+                .findByGroupChatIdAndUserUsernameAndIsActiveTrue(groupId, byUsername)
+                .map(m -> m.getRole() == GroupMember.GroupRole.ADMIN)
+                .orElse(false);
+        if (!isOwner && !isAdmin) throw new AccessDeniedException("Bạn không có quyền đổi avatar nhóm.");
 
+        g.setAvatarUrl((url == null || url.isBlank()) ? null : url.trim());
+        groupChatRepo.save(g);
+    }
+
+    @Transactional
+    public void clearGroupAvatar(Long groupId, String byUsername) {
+        setGroupAvatar(groupId, byUsername, null);
+    }
 }

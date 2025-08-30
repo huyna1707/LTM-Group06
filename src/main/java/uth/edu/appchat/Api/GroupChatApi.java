@@ -82,7 +82,13 @@ public class GroupChatApi {
         User creator = userRepo.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng: " + username));
         GroupChat group = groupChatService.createGroup(form, creator);
-        GroupDTO groupDTO = new GroupDTO(group.getId(), group.getName(), group.getMemberCount());
+
+        GroupDTO groupDTO = new GroupDTO(
+                group.getId(),
+                group.getName(),
+                group.getMemberCount(),
+                group.getAvatarUrl()   // 👈 thêm tham số 4
+        );
         return ResponseEntity.ok(groupDTO);
     }
 
@@ -316,5 +322,41 @@ public class GroupChatApi {
                     "message", "Lỗi hệ thống, vui lòng thử lại."
             ));
         }
+    }
+    @PatchMapping("/{groupId}/avatar")
+    public ResponseEntity<?> setAvatar(@PathVariable Long groupId, @RequestBody java.util.Map<String,String> body) {
+        String by = SecurityContextHolder.getContext().getAuthentication().getName();
+        String url = java.util.Optional.ofNullable(body.get("url")).orElse("");
+        groupChatService.setGroupAvatar(groupId, by, url);
+
+        var recipients = groupMemberRepo.findActiveUsernames(groupId);
+        var payload = new java.util.HashMap<String,Object>();
+        payload.put("event", "GROUP_AVATAR_CHANGED");
+        payload.put("groupId", groupId);
+        payload.put("avatarUrl", url);
+        payload.put("by", by);
+        payload.put("timestamp", java.time.Instant.now().toString());
+        for (String u : recipients) {
+            messaging.convertAndSendToUser(u, "/queue/group", payload);
+        }
+        return ResponseEntity.ok(java.util.Map.of("success", true, "url", url));
+    }
+
+    @DeleteMapping("/{groupId}/avatar")
+    public ResponseEntity<?> clearAvatar(@PathVariable Long groupId) {
+        String by = SecurityContextHolder.getContext().getAuthentication().getName();
+        groupChatService.clearGroupAvatar(groupId, by);
+
+        var recipients = groupMemberRepo.findActiveUsernames(groupId);
+        var payload = new java.util.HashMap<String,Object>();
+        payload.put("event", "GROUP_AVATAR_CHANGED");
+        payload.put("groupId", groupId);
+        payload.put("avatarUrl", ""); // xoá -> rỗng
+        payload.put("by", by);
+        payload.put("timestamp", java.time.Instant.now().toString());
+        for (String u : recipients) {
+            messaging.convertAndSendToUser(u, "/queue/group", payload);
+        }
+        return ResponseEntity.ok(java.util.Map.of("success", true));
     }
 }
