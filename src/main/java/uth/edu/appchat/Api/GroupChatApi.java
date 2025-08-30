@@ -11,6 +11,7 @@ import uth.edu.appchat.Models.GroupChat;
 import uth.edu.appchat.Models.GroupMessage;
 import uth.edu.appchat.Models.User;
 import uth.edu.appchat.Repositories.GroupChatRepository;
+import uth.edu.appchat.Repositories.GroupMemberRepository;
 import uth.edu.appchat.Repositories.GroupMessageRepository;
 import uth.edu.appchat.Repositories.UserRepository;
 import uth.edu.appchat.Services.GroupChatService;
@@ -31,6 +32,7 @@ public class GroupChatApi {
     private final SimpMessagingTemplate messaging;
     private final GroupChatRepository groupChatRepo;
     private final GroupMessageRepository groupMessageRepo;
+    private final GroupMemberRepository groupMemberRepo;   // 👈 THÊM
 
     private UserDTO toUserDto(User u) {
         if (u == null) return null;
@@ -229,15 +231,58 @@ public class GroupChatApi {
 
     @PostMapping("/{groupId}/leave")
     public ResponseEntity<?> leave(@PathVariable Long groupId) {
-        groupChatService.leaveGroup(groupId); // ✅ dùng đúng service soft-leave
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        String fullName = userRepo.findByUsername(username)
+                .map(u -> Optional.ofNullable(u.getFullName()).orElse(u.getUsername()))
+                .orElse(username);
+
+        // người nhận (lấy trước khi rời)
+        var recipients = groupMemberRepo.findActiveUsernames(groupId);
+        if (!recipients.contains(username)) recipients.add(username);
+
+        groupChatService.leaveGroup(groupId); // rời nhóm (soft/hard tuỳ bạn đã chọn)
+
+        var payload = new java.util.HashMap<String, Object>();
+        payload.put("event", "GROUP_MEMBER_LEFT");
+        payload.put("groupId", groupId);
+        payload.put("username", username);
+        payload.put("fullName", fullName);
+        payload.put("timestamp", java.time.Instant.now().toString());
+
+        for (String u : recipients) {
+            messaging.convertAndSendToUser(u, "/queue/group", payload);
+        }
         return ResponseEntity.ok(java.util.Map.of("success", true));
     }
 
+
     @DeleteMapping("/{groupId}")
     public ResponseEntity<?> delete(@PathVariable Long groupId) {
-        groupChatService.deleteGroup(groupId);
-        return ResponseEntity.ok().build();
+        String byUsername = SecurityContextHolder.getContext().getAuthentication().getName();
+
+        GroupChat group = groupChatRepo.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy nhóm."));
+        String groupName = group.getName();
+
+        // lấy danh sách người nhận TRƯỚC khi xóa
+        var recipients = groupMemberRepo.findActiveUsernames(groupId);
+        if (!recipients.contains(byUsername)) recipients.add(byUsername);
+
+        groupChatService.deleteGroup(groupId); // xóa nhóm (đã check quyền trong service)
+
+        var payload = new java.util.HashMap<String, Object>();
+        payload.put("event", "GROUP_DELETED");
+        payload.put("groupId", groupId);
+        payload.put("groupName", groupName);
+        payload.put("by", byUsername);
+        payload.put("timestamp", java.time.Instant.now().toString());
+
+        for (String u : recipients) {
+            messaging.convertAndSendToUser(u, "/queue/group", payload);
+        }
+        return ResponseEntity.ok(java.util.Map.of("success", true));
     }
+
 
 
     @GetMapping("/{groupId}/me")

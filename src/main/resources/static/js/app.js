@@ -270,12 +270,72 @@ function onPrivateMessageReceived(payload) {
 }
 function onGroupMessageReceived(payload) {
   const message = normalizeIncomingMessage(JSON.parse(payload.body));
+
+  // === RỜI NHÓM ===
+  if (message?.event === 'GROUP_MEMBER_LEFT') {
+    if (currentChat?.type === 'group' && String(currentChat.id) === String(message.groupId)) {
+      const who = (message.username === username) ? 'Bạn' : (message.fullName || message.username || 'Thành viên');
+      const div = document.createElement('div');
+      div.className = 'flex justify-center my-4';
+      div.innerHTML = `<div class="glass-effect px-6 py-3 rounded-full text-sm text-red-600 dark:text-red-300">
+                         ${who} đã rời khỏi phòng chat 👋
+                       </div>`;
+      chatMessages?.appendChild(div);
+      scrollToBottom();
+
+      showNotificationToast(`${who} đã rời nhóm`, 'info');
+
+      // giảm bộ đếm ngay (UI), rồi vẫn refresh để đồng bộ server
+      const appStatusText = document.getElementById('appStatusText');
+      const m = appStatusText?.textContent?.match(/(\d+)/);
+      if (m) {
+        const n = Math.max(0, (parseInt(m[1], 10) || 0) - 1);
+        appStatusText.textContent = `${n} thành viên`;
+      }
+      scheduleSidebarRefresh();
+    }
+    return;
+  }
+
+  // === XÓA NHÓM ===
+  if (message?.event === 'GROUP_DELETED') {
+    if (currentChat?.type === 'group' && String(currentChat.id) === String(message.groupId)) {
+      const div = document.createElement('div');
+      div.className = 'flex justify-center my-4';
+      div.innerHTML = `<div class="glass-effect px-6 py-3 rounded-full text-sm text-red-600 dark:text-red-300">
+                         Nhóm "${message.groupName || ''}" đã bị xoá bởi quản trị viên 🗑️
+                       </div>`;
+      chatMessages?.appendChild(div);
+      scrollToBottom();
+
+      showNotificationToast(`Nhóm đã bị xoá`, 'error');
+
+      // khóa composer & ẩn hành động nhóm
+      messageInput?.setAttribute('disabled', 'true');
+      sendButton?.setAttribute('disabled', 'true');
+      groupActions?.classList.add('hidden');
+
+      scheduleSidebarRefresh();
+
+      // điều hướng nhẹ sau 1s (nếu bạn có hàm switchToPublicChat)
+      setTimeout(() => {
+        if (typeof switchToPublicChat === 'function') switchToPublicChat();
+        else location.reload();
+      }, 1000);
+    } else {
+      // nếu đang ở phòng khác: chỉ toast + refresh list
+      showNotificationToast(`Một nhóm bạn tham gia đã bị xoá`, 'error');
+      scheduleSidebarRefresh();
+    }
+    return;
+  }
+
+  // === Tin nhắn thường (giữ nguyên phần hiện có) ===
   const msgGroupId = message.groupId ?? message.chatId ?? message.group?.id;
   if (!(currentChat?.type === 'group' && currentChat?.id == msgGroupId)) {
     updateChatListWithNewMessage();
     return;
   }
-
   const hasAtt = Array.isArray(message.attachments) && message.attachments.length > 0;
   const mid = message.id || null;
 
