@@ -105,18 +105,85 @@ function addAttachmentPreview(att) {
 // === Render attachments trong bong bóng
 function renderAttachmentsHtml(attachments) {
   if (!Array.isArray(attachments) || attachments.length === 0) return '';
-  return attachments.map(a => {
-    if (!a || !a.url) return '';
-    const name = (a.name || a.url).split('/').pop();
-    if (a.type === 'image') {
-      return `<div class="mt-2"><img src="${a.url}" alt="${name}" class="max-h-72 rounded-lg object-contain"></div>`;
-    }
-    if (a.type === 'video') {
-      return `<div class="mt-2"><video src="${a.url}" controls class="max-h-72 rounded-lg"></video></div>`;
-    }
-    return `<div class="mt-2"><a href="${a.url}" target="_blank" rel="noopener" class="underline break-all">📎 ${name}</a></div>`;
-  }).join('');
+
+  const imgs = [];
+  const vids = [];
+  const files = [];
+
+  for (const a of attachments) {
+    if (!a || !a.url) continue;
+    const t = (a.type || detectFileTypeFromUrl(a.url));
+    if (t === 'image') imgs.push(a);
+    else if (t === 'video') vids.push(a);
+    else files.push(a);
+  }
+
+  const parts = [];
+
+  // ẢNH: lưới 2 cột, lazy-load
+  if (imgs.length) {
+    parts.push(
+        `<div class="mt-2 grid grid-cols-2 gap-2">
+        ${imgs.map(a => {
+          const url = safeUrl(a.url);
+          const name = escapeHtml((a.name || a.url).split('/').pop());
+          return `
+            <a href="${url}" target="_blank" rel="noopener noreferrer"
+               class="block overflow-hidden rounded-lg">
+              <img src="${url}" alt="${name}" loading="lazy"
+                   class="w-full h-48 object-cover"
+                   onerror="this.style.objectFit='contain'">
+            </a>`;
+        }).join('')}
+      </div>`
+    );
+  }
+
+  // VIDEO: preload metadata
+  for (const v of vids) {
+    const url = safeUrl(v.url);
+    const name = escapeHtml((v.name || v.url).split('/').pop());
+    parts.push(
+        `<div class="mt-2">
+        <video src="${url}" title="${name}" controls preload="metadata"
+               class="w-full max-h-72 rounded-lg"></video>
+      </div>`
+    );
+  }
+
+  // FILE THƯỜNG: thẻ tập tin có icon + info + actions
+  for (const f of files) {
+    const url = safeUrl(f.url);
+    const nameRaw = (f.name || f.url).split('/').pop();
+    const name = escapeHtml(nameRaw);
+    const ext = getFileExt(nameRaw);
+    const sizeText = formatBytes(f.size);
+    const icon = iconByExt(ext);
+
+    parts.push(
+        `<div class="mt-2 flex items-center gap-3 p-3 rounded-lg border
+              bg-white/70 dark:bg-gray-800/50">
+    <div class="text-2xl flex-shrink-0">${icon}</div>
+    <div class="min-w-0 flex-1">
+      <div class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+        ${name}
+      </div>
+      <div class="text-xs text-gray-500 dark:text-gray-400">
+        ${ext ? ext.toUpperCase() : 'FILE'}${sizeText ? ' • ' + sizeText : ''}
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="${url}" target="_blank" rel="noopener noreferrer"
+         class="text-sm px-2 py-1 rounded border
+                hover:bg-gray-100 dark:hover:bg-gray-700">Mở</a>
+    </div>
+  </div>`
+    );
+  }
+
+  return parts.join('');
 }
+
 // --- Nhận diện URL file & chuẩn hoá message nhận về (URL → attachments[])
 function detectFileTypeFromUrl(url = '') {
   const u = url.toLowerCase();
@@ -124,6 +191,45 @@ function detectFileTypeFromUrl(url = '') {
   if (u.match(/\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/)) return 'video';
   return 'file';
 }
+
+function formatBytes(bytes) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n < 0) return '';
+  const units = ['B','KB','MB','GB','TB'];
+  let v = n, i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  const fixed = (v < 10 && i > 0) ? v.toFixed(1) : Math.round(v).toString();
+  return `${fixed} ${units[i]}`;
+}
+
+function safeUrl(u) {
+  const s = String(u || '').trim();
+  if (!s) return '#';
+  if (/^javascript:/i.test(s)) return '#';
+  // Cho phép http/https và đường dẫn nội bộ (/uploads/..)
+  if (/^https?:\/\//i.test(s) || s.startsWith('/')) return s;
+  return '#';
+}
+
+function getFileExt(nameOrUrl = '') {
+  const base = String(nameOrUrl).split('?')[0].split('#')[0];
+  const m = base.match(/\.([a-z0-9]+)$/i);
+  return (m ? m[1] : '').toLowerCase();
+}
+
+function iconByExt(ext) {
+  switch (ext) {
+    case 'pdf': return '📰';
+    case 'doc': case 'docx': return '📝';
+    case 'xls': case 'xlsx': return '📊';
+    case 'ppt': case 'pptx': return '📈';
+    case 'zip': case 'rar': case '7z': return '🗜️';
+    case 'mp3': case 'wav': return '🎵';
+    case 'mp4': case 'mov': case 'm4v': return '🎬';
+    default: return '📄';
+  }
+}
+
 function looksLikeHttpOrUploads(s) {
   return /^https?:\/\//i.test((s || '').trim()) || /^\/uploads\//i.test((s || '').trim());
 }
@@ -148,7 +254,7 @@ function normalizeIncomingMessage(msg) {
   }
   return m;
 }
-
+const privateMsgIndex = new Map();
 const groupMsgIndex = new Map();
 let stompClient = null;
 let username = null;
@@ -267,15 +373,33 @@ function onError(error) {
    MESSAGE HANDLERS
 ======================================================== */
 function onPrivateMessageReceived(payload) {
-  const message = JSON.parse(payload.body);
+  const message = normalizeIncomingMessage(JSON.parse(payload.body)); // 👈 chuẩn hoá URL → attachments
+
   if (currentChat?.type === 'private' && blockToggle?.checked) return;
 
   const msgChatId = message.chatId ?? message.privateChatId ?? message.chat?.id;
   if (currentChat?.type === 'private' && currentChat?.id == msgChatId) {
+    const hasAtt = Array.isArray(message.attachments) && message.attachments.length > 0;
+    const mid = message.id || null;
+
+    if (mid) {
+      const prev = privateMsgIndex.get(mid);
+      if (prev) {
+        if (prev.hasAtt || !hasAtt) return;            // đã có file rồi hoặc lần này vẫn chưa có file -> bỏ
+        updatePrivateMessageBubble(message);            // lần 2 có file -> cập nhật
+        privateMsgIndex.set(mid, { hasAtt: true });
+        return;
+      } else {
+        displayPrivateMessage(message, true);           // lần đầu
+        privateMsgIndex.set(mid, { hasAtt });
+        return;
+      }
+    }
     try { displayPrivateMessage(message, true); } catch (e) { console.error(e); }
   }
   updateChatListWithNewMessage();
 }
+
 function updateHeaderMemberCount(n) {
   const appStatusText = document.getElementById('appStatusText');
   if (appStatusText && Number.isFinite(n)) {
@@ -484,7 +608,7 @@ async function loadPrivateChatHistory(chatId) {
     if (res.ok) {
       const messages = await res.json();
       chatMessages.innerHTML = '';
-      messages.forEach(m => displayPrivateMessage(m, false));
+      messages.forEach(m => displayPrivateMessage(normalizeIncomingMessage(m), false));
       scrollToBottom();
     }
   } catch (e) { console.error('Error loading private chat history:', e); }
@@ -711,7 +835,10 @@ async function switchToPrivateChat(friend) {
       };
       groupActions?.classList.add('hidden');
       updateChatHeader(getInitials(currentChat.name), `Chat với ${currentChat.name}`, 'Chat riêng tư');
-
+      const otherAvatar = (friend && (friend.avatarUrl || friend.avatar_url))
+          || (friend?.username && avatarCache.get(friend.username))
+          || null;
+      applyPrivateHeaderAvatar(otherAvatar, currentChat.name);
       // 👉 nạp nickname partner từ server
       await hydratePrivateNickname(currentChat.id);
 
@@ -862,10 +989,15 @@ function resolveDisplayNameFromMap(senderLike) {
 }
 
 function displayPrivateMessage(message, autoScroll = true) {
+  // Chuẩn hoá: URL thuần -> attachments
+  const msg = typeof normalizeIncomingMessage === 'function'
+      ? normalizeIncomingMessage(message)
+      : message;
+
   const div = document.createElement('div');
   div.className = 'flex items-start space-x-3 message-bubble';
 
-  const s = normalizeSender(message);
+  const s = normalizeSender(msg);
   const isMe = s.username === username;
 
   const displayName = resolveDisplayNameFromMap(s);
@@ -873,61 +1005,25 @@ function displayPrivateMessage(message, autoScroll = true) {
   const gradient = pickGradient(simpleHash(s.username || String(s.id || '')));
   const avatarUrl = s.avatarUrl || (s.username && avatarCache.get(s.username)) || null;
 
-  const t = message.timestamp ? new Date(message.timestamp) : null;
-  const time = (t && !isNaN(t)) ? t.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})
-      : new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
-  const rawText = (message.content || '').trim();
-  const meTextHtml = renderTextHtml(rawText, 'text-white');
-  const otherTextHtml = renderTextHtml(rawText, 'text-gray-800 dark:text-gray-200');
-  if (isMe) {
-    div.classList.add('justify-end');
-    div.innerHTML = `
-      <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md">
-       ${meTextHtml}
-        ${renderAttachmentsHtml(message.attachments)}
-        <div class="flex items-center justify-end mt-1"><span class="text-xs text-purple-100">${time}</span></div>
-      </div>
-      ${renderAvatar(avatarUrl, initials, gradient, 8)}
-    `;
-  } else {
-    div.classList.add('items-start');
-    div.innerHTML = `
-      ${renderAvatar(avatarUrl, initials, gradient, 8)}
-      <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md">
-        <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">${displayName}</div>
-        ${otherTextHtml}
-        ${renderAttachmentsHtml(message.attachments)}
-        <div class="flex items-center justify-end mt-1"><span class="text-xs text-gray-500 dark:text-gray-400">${time}</span></div>
-      </div>
-    `;
-  }
-  chatMessages?.appendChild(div);
-  if (autoScroll) scrollToBottom();
-}
-
-function displayGroupMessage(message, autoScroll = true) {
-  const div = document.createElement('div');
-  div.className = 'flex items-start space-x-3 message-bubble';
-
-  const s = normalizeSender(message);
-  const isMe = s.username === username;
-
-  const displayName = resolveDisplayNameFromMap(s);
-  const initials = getInitials(displayName);
-  const gradient = pickGradient(simpleHash(s.username || String(s.id || '')));
-  const avatarUrl = s.avatarUrl || (s.username && avatarCache.get(s.username)) || null;
-
-  const t = message.timestamp ? new Date(message.timestamp) : null;
+  const t = msg.timestamp ? new Date(msg.timestamp) : null;
   const time = (t && !isNaN(t))
-      ? t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-      : new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      ? t.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})
+      : new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
+
+  const rawText = (msg.content || '').trim();
+  const meTextHtml    = renderTextHtml(rawText, 'text-white');
+  const otherTextHtml = renderTextHtml(rawText, 'text-gray-800 dark:text-gray-200');
+  const attHtml       = renderAttachmentsHtml(msg.attachments);
+
+  // ✅ Không render bong bóng trống (VD: lượt 1 chỉ có URL, đã bị normalize xoá text)
+  if (!meTextHtml && !otherTextHtml && !attHtml) return;
 
   if (isMe) {
     div.classList.add('justify-end');
     div.innerHTML = `
       <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md break-words">
-        ${renderTextHtml(message.content, 'text-white')}
-        ${renderAttachmentsHtml(message.attachments)}
+        ${meTextHtml || '' }
+        ${attHtml     || '' }
         <div class="flex items-center justify-end mt-1"><span class="text-xs text-purple-100">${time}</span></div>
       </div>
       ${renderAvatar(avatarUrl, initials, gradient, 8)}
@@ -938,15 +1034,82 @@ function displayGroupMessage(message, autoScroll = true) {
       ${renderAvatar(avatarUrl, initials, gradient, 8)}
       <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md break-words">
         <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">${displayName}</div>
-        ${renderTextHtml(message.content, 'text-gray-800 dark:text-gray-200')}
-        ${renderAttachmentsHtml(message.attachments)}
+        ${otherTextHtml || '' }
+        ${attHtml       || '' }
         <div class="flex items-center justify-end mt-1"><span class="text-xs text-gray-500 dark:text-gray-400">${time}</span></div>
       </div>
     `;
   }
+
+  // ✅ gắn data-mid để có thể update về sau
+  const mid = msg.id ?? msg.messageId ?? null;
+  if (mid != null) div.setAttribute('data-mid', String(mid));
+
   chatMessages?.appendChild(div);
   if (autoScroll) scrollToBottom();
 }
+
+function displayGroupMessage(message, autoScroll = true) {
+  // Chuẩn hoá: URL thuần -> attachments
+  const msg = typeof normalizeIncomingMessage === 'function'
+      ? normalizeIncomingMessage(message)
+      : message;
+
+  const div = document.createElement('div');
+  div.className = 'flex items-start space-x-3 message-bubble';
+
+  const s = normalizeSender(msg);
+  const isMe = s.username === username;
+
+  const displayName = resolveDisplayNameFromMap(s);
+  const initials = getInitials(displayName);
+  const gradient = pickGradient(simpleHash(s.username || String(s.id || '')));
+  const avatarUrl = s.avatarUrl || (s.username && avatarCache.get(s.username)) || null;
+
+  const t = msg.timestamp ? new Date(msg.timestamp) : null;
+  const time = (t && !isNaN(t))
+      ? t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+      : new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+
+  const textHtml = isMe
+      ? renderTextHtml(msg.content, 'text-white')
+      : renderTextHtml(msg.content, 'text-gray-800 dark:text-gray-200');
+  const attHtml  = renderAttachmentsHtml(msg.attachments);
+
+  // ✅ Không render bong bóng trống
+  if (!textHtml && !attHtml) return;
+
+  if (isMe) {
+    div.classList.add('justify-end');
+    div.innerHTML = `
+      <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md break-words">
+        ${textHtml || '' }
+        ${attHtml  || '' }
+        <div class="flex items-center justify-end mt-1"><span class="text-xs text-purple-100">${time}</span></div>
+      </div>
+      ${renderAvatar(avatarUrl, initials, gradient, 8)}
+    `;
+  } else {
+    div.classList.add('items-start');
+    div.innerHTML = `
+      ${renderAvatar(avatarUrl, initials, gradient, 8)}
+      <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md break-words">
+        <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">${displayName}</div>
+        ${textHtml || '' }
+        ${attHtml  || '' }
+        <div class="flex items-center justify-end mt-1"><span class="text-xs text-gray-500 dark:text-gray-400">${time}</span></div>
+      </div>
+    `;
+  }
+
+  // ✅ gắn data-mid để có thể update về sau
+  const mid = msg.id ?? msg.messageId ?? null;
+  if (mid != null) div.setAttribute('data-mid', String(mid));
+
+  chatMessages?.appendChild(div);
+  if (autoScroll) scrollToBottom();
+}
+
 
 /* ========================================================
    FRIEND SYSTEM
@@ -2075,8 +2238,21 @@ function clearComposer() {
    CẬP NHẬT BONG BÓNG NHÓM KHI FILE ĐẾN TRỄ (fallback thêm mới)
 ======================================================== */
 function updateGroupMessageBubble(message) {
-  // Nếu trước đó chưa đánh data-mid, xử lý đơn giản: thêm bong bóng mới
-  displayGroupMessage(message, true);
+  const mid = message.id;
+  if (!mid) return displayGroupMessage(message, true);
+  const sel = `[data-mid="${window.CSS?.escape ? CSS.escape(String(mid)) : String(mid).replace(/"/g,'\\"')}"]`;
+  const old = chatMessages?.querySelector(sel);
+  if (old) old.remove();               // xoá bong bóng trước (có thể trống)
+  displayGroupMessage(message, true);  // vẽ lại bong bóng có file
+}
+
+function updatePrivateMessageBubble(message) {
+  const mid = message.id;
+  if (!mid) return displayPrivateMessage(message, true);
+  const sel = `[data-mid="${window.CSS?.escape ? CSS.escape(String(mid)) : String(mid).replace(/"/g,'\\"')}"]`;
+  const old = chatMessages?.querySelector(sel);
+  if (old) old.remove();               // xoá bong bóng cũ (trống)
+  displayPrivateMessage(message, true); // vẽ lại bong bóng có file
 }
 
 /* ========================================================
@@ -2772,5 +2948,24 @@ async function updateOneMemberNickname(userId, nickname) {
   } catch (e) {
     console.error(e);
     showErrorMessage('Lưu biệt danh thất bại.');
+  }
+}
+function applyPrivateHeaderAvatar(url, name) {
+  const img = document.getElementById('chatHeaderAvatarImg');
+  const fallback = document.getElementById('chatHeaderAvatarFallback');
+  const fallbackText = document.getElementById('chatHeaderAvatarFallbackText');
+
+  if (!img || !fallback || !fallbackText) return;
+
+  if (url && typeof url === 'string' && url.trim() !== '') {
+    img.src = url;
+    img.classList.remove('hidden');
+    img.style.display = 'block';
+    fallback.style.display = 'none';
+  } else {
+    img.style.display = 'none';
+    img.classList.add('hidden');
+    fallback.style.display = 'flex';
+    fallbackText.textContent = getInitials(name || '');
   }
 }
