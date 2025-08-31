@@ -325,7 +325,44 @@
     </div>
   </div>
 </div>
+<!-- Modal danh sách thành viên -->
+<div id="membersModal"
+     class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/40" id="membersModalBackdrop"></div>
 
+  <div class="absolute inset-x-0 top-12 mx-auto w-full max-w-lg
+              bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700
+              rounded-2xl shadow-xl">
+    <!-- Header -->
+    <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+      <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Thành viên nhóm</h3>
+      <button id="closeMembersModal"
+              class="px-2 py-1 rounded-lg border hover:bg-gray-50 dark:hover:bg-gray-800">
+        Đóng
+      </button>
+    </div>
+
+    <!-- Search -->
+    <div class="p-3">
+      <input id="membersSearchInput" type="text" placeholder="Tìm thành viên…"
+             class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700
+                    bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+    </div>
+
+    <!-- List -->
+    <div id="membersList"
+         class="space-y-2 max-h-96 overflow-y-auto border-t border-gray-200 dark:border-gray-700 p-3">
+      <!-- render bằng JS -->
+    </div>
+
+    <!-- Note -->
+    <div class="p-3 border-t border-gray-200 dark:border-gray-700">
+      <p class="text-xs text-gray-500 dark:text-gray-400">
+        Chỉ mình bạn nhìn thấy biệt danh bạn đặt cho từng người trong nhóm này.
+      </p>
+    </div>
+  </div>
+</div>
 <!-- Settings Drawer + overlay -->
 <div
         id="chatSettingsPanel"
@@ -402,23 +439,27 @@
         </div>
 
         <!-- GROUP ONLY: Danh sách thành viên -->
-        <div id="memberNicknamesSection" class="space-y-2 hidden">
-          <div class="flex items-center gap-2">
-            <input id="memberSearchInput" type="text" placeholder="Tìm thành viên…"
-                   class="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
-            <button id="saveMemberNicknamesBtn"
-                    class="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white">Lưu biệt danh</button>
-          </div>
+<!--        <div id="memberNicknamesSection" class="space-y-2 hidden">-->
+<!--          <div class="flex items-center gap-2">-->
+<!--            <input id="memberSearchInput" type="text" placeholder="Tìm thành viên…"-->
+<!--                   class="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200">-->
+<!--            <button id="saveMemberNicknamesBtn"-->
+<!--                    class="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white">Lưu biệt danh</button>-->
+<!--          </div>-->
 
-          <div id="memberNicknameList"
-               class="space-y-2 max-h-72 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-2 bg-white dark:bg-gray-800">
-            <!-- render bằng JS -->
-          </div>
+<!--          <div id="memberNicknameList"-->
+<!--               class="space-y-2 max-h-72 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-2 bg-white dark:bg-gray-800">-->
+<!--            &lt;!&ndash; render bằng JS &ndash;&gt;-->
+<!--          </div>-->
 
-          <p class="text-xs text-gray-500 dark:text-gray-400">
-            Chỉ mình bạn nhìn thấy biệt danh đã đặt cho từng người trong nhóm này.
-          </p>
-        </div>
+<!--          <p class="text-xs text-gray-500 dark:text-gray-400">-->
+<!--            Chỉ mình bạn nhìn thấy biệt danh đã đặt cho từng người trong nhóm này.-->
+<!--          </p>-->
+<!--        </div>-->
+        <button id="openMembersBtn"
+                class="w-full py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white">
+          Xem danh sách thành viên
+        </button>
       </div>
     </div>
 

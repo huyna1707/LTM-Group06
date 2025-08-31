@@ -24,24 +24,23 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
     boolean existsByGroupChatIdAndUserIdAndIsActive(Long groupChatId, Long userId, boolean isActive);
 
     @Query("""
-           SELECT gm
-           FROM GroupMember gm
-           JOIN FETCH gm.user u
-           WHERE gm.groupChat.id = :groupId
-           ORDER BY gm.joinedAt ASC
-           """)
+       SELECT gm
+       FROM GroupMember gm
+       JOIN FETCH gm.user u
+       WHERE gm.groupChat.id = :groupId
+         AND gm.isActive = true
+       ORDER BY gm.joinedAt ASC
+       """)
     List<GroupMember> findByGroupIdWithUser(@Param("groupId") Long groupId);
 
+    // ✅ CHỈ GIỮ 1 BẢN NÀY
     Optional<GroupMember> findByGroupChatIdAndUserId(Long groupId, Long userId);
 
-    // ====== THÊM MỚI (phục vụ leave/delete) ======
+    // ===== dùng cho leave/delete/avatar, v.v. =====
     Optional<GroupMember> findByGroupChatIdAndUserUsernameAndIsActiveTrue(Long groupChatId, String username);
-
     long countByGroupChatIdAndIsActiveTrue(Long groupChatId);
-
     long countByGroupChatIdAndRoleAndIsActiveTrue(Long groupChatId, GroupMember.GroupRole role);
-
-    Optional<GroupMember> findFirstByGroupChatIdAndIsActiveTrueOrderByJoinedAtAsc(Long groupChatId);
+    Optional<GroupMember> findFirstByGroupChatIdAndIsActiveTrueOrderByJoinedAtAsc(Long groupId);
 
     @Query("""
        select gm.user.username

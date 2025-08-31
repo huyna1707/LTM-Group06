@@ -87,7 +87,8 @@ public class GroupChatApi {
                 group.getId(),
                 group.getName(),
                 group.getMemberCount(),
-                group.getAvatarUrl()   // 👈 thêm tham số 4
+                group.getAvatarUrl(),
+                group.getNickname()  // 👈 thêm tham số 4
         );
         return ResponseEntity.ok(groupDTO);
     }
@@ -345,13 +346,15 @@ public class GroupChatApi {
     @DeleteMapping("/{groupId}/avatar")
     public ResponseEntity<?> clearAvatar(@PathVariable Long groupId) {
         String by = SecurityContextHolder.getContext().getAuthentication().getName();
-        groupChatService.clearGroupAvatar(groupId, by);
+
+        // gọi trực tiếp setGroupAvatar với url = null
+        groupChatService.setGroupAvatar(groupId, by, null);
 
         var recipients = groupMemberRepo.findActiveUsernames(groupId);
         var payload = new java.util.HashMap<String,Object>();
         payload.put("event", "GROUP_AVATAR_CHANGED");
         payload.put("groupId", groupId);
-        payload.put("avatarUrl", ""); // xoá -> rỗng
+        payload.put("avatarUrl", "");
         payload.put("by", by);
         payload.put("timestamp", java.time.Instant.now().toString());
         for (String u : recipients) {
@@ -359,4 +362,46 @@ public class GroupChatApi {
         }
         return ResponseEntity.ok(java.util.Map.of("success", true));
     }
+
+    @DeleteMapping("/{groupId}/members/{userId}")
+    public ResponseEntity<?> kickMember(@PathVariable Long groupId, @PathVariable Long userId) {
+        String by = SecurityContextHolder.getContext().getAuthentication().getName();
+        var recipients = groupMemberRepo.findActiveUsernames(groupId);
+        userRepo.findById(userId).map(User::getUsername).ifPresent(recipients::add);
+
+        groupChatService.kickMember(groupId, userId, by);
+
+        long active = groupMemberRepo.countByGroupChatIdAndIsActiveTrue(groupId);
+        var payload = new java.util.HashMap<String,Object>();
+        payload.put("event", "GROUP_MEMBER_KICKED");
+        payload.put("groupId", groupId);
+        payload.put("username", userRepo.findById(userId).map(User::getUsername).orElse(null));
+        payload.put("activeCount", active);
+        payload.put("by", by);
+        payload.put("timestamp", java.time.Instant.now().toString());
+        for (String u : recipients) messaging.convertAndSendToUser(u, "/queue/group", payload);
+
+        return ResponseEntity.ok(java.util.Map.of("success", true));
+    }
+    @PostMapping("/{groupId}/kick/{userId}")
+    public ResponseEntity<?> kick(@PathVariable Long groupId, @PathVariable Long userId) {
+        String by = SecurityContextHolder.getContext().getAuthentication().getName();
+
+        groupChatService.kickMember(groupId, userId, by);
+
+        var recipients = groupMemberRepo.findActiveUsernames(groupId);
+        var payload = new java.util.HashMap<String,Object>();
+        payload.put("event", "GROUP_MEMBER_KICKED");
+        payload.put("groupId", groupId);
+        payload.put("kickedUserId", userId);
+        payload.put("by", by);
+        payload.put("activeCount", groupMemberRepo.countByGroupChatIdAndIsActiveTrue(groupId));
+        payload.put("timestamp", java.time.Instant.now().toString());
+        for (String u : recipients) {
+            messaging.convertAndSendToUser(u, "/queue/group", payload);
+        }
+
+        return ResponseEntity.ok(java.util.Map.of("success", true));
+    }
 }
+
