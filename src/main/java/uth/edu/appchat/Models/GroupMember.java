@@ -139,4 +139,25 @@ public class GroupMember {
     public void setNicknameUpdatedAt(LocalDateTime nicknameUpdatedAt) {
         this.nicknameUpdatedAt = nicknameUpdatedAt;
     }
+
+    @Transient
+    public boolean isOwner() {
+        if (getGroupChat() == null || getUser() == null) return false;
+        var creator = getGroupChat().getCreatedBy();
+        return creator != null
+                && creator.getId() != null
+                && getUser().getId() != null
+                && creator.getId().equals(getUser().getId());
+    }
+
+    @Transient
+    public boolean isAdmin() {
+        return isOwner() || getRole() == GroupRole.ADMIN;
+    }
+
+    @Transient
+    public boolean isModerator() {
+        return isAdmin() || getRole() == GroupRole.MODERATOR;
+    }
+
 }

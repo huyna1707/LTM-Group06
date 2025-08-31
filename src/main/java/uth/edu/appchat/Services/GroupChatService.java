@@ -355,7 +355,44 @@ public class GroupChatService {
     }
 
     @Transactional
-    public void clearGroupAvatar(Long groupId, String byUsername) {
-        setGroupAvatar(groupId, byUsername, null);
+    public void kickMember(Long groupId, Long userId, String byUsername) {
+        GroupChat group = groupChatRepo.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy nhóm."));
+        User actor = userRepo.findByUsername(byUsername)
+                .orElseThrow(() -> new IllegalArgumentException("Người thực hiện không hợp lệ."));
+        User target = userRepo.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Thành viên không tồn tại."));
+
+        // Actor phải là Owner hoặc Admin đang active
+        var actorMem = groupMemberRepo
+                .findByGroupChatIdAndUserUsernameAndIsActiveTrue(groupId, byUsername)
+                .orElseThrow(() -> new org.springframework.security.access.AccessDeniedException("Bạn không thuộc nhóm."));
+        boolean owner = group.getCreatedBy() != null && byUsername.equals(group.getCreatedBy().getUsername());
+        boolean admin = actorMem.getRole() == GroupMember.GroupRole.ADMIN;
+        if (!owner && !admin) throw new org.springframework.security.access.AccessDeniedException("Chỉ Admin/Owner mới được kick thành viên.");
+
+        var targetMem = groupMemberRepo
+                .findByGroupChatIdAndUserId(groupId, target.getId())
+                .orElseThrow(() -> new IllegalArgumentException("Người này không còn là thành viên."));
+
+        // Chặn đá Owner
+        if (group.getCreatedBy() != null && Objects.equals(group.getCreatedBy().getId(), target.getId())) {
+            throw new org.springframework.security.access.AccessDeniedException("Không thể kick Owner.");
+        }
+
+        boolean targetWasAdmin = targetMem.getRole() == GroupMember.GroupRole.ADMIN;
+
+        // ✅ HARD DELETE
+        groupMemberRepo.delete(targetMem);
+
+        // Nếu vừa xóa 1 admin và không còn admin nào -> promote người vào sớm nhất lên Admin
+        if (targetWasAdmin) {
+            long admins = groupMemberRepo.countByGroupChatIdAndRoleAndIsActiveTrue(groupId, GroupMember.GroupRole.ADMIN);
+            if (admins == 0) {
+                groupMemberRepo.findFirstByGroupChatIdAndIsActiveTrueOrderByJoinedAtAsc(groupId)
+                        .ifPresent(m -> m.setRole(GroupMember.GroupRole.ADMIN));
+            }
+        }
     }
+
 }

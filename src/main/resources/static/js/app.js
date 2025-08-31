@@ -4,7 +4,7 @@
    DOM HELPERS & GLOBALS
 ======================================================== */
 const $ = (sel) => document.querySelector(sel);
-
+window.__isAdminOrOwnerForCurrentGroup = false;
 // CSRF
 const csrfToken = document.querySelector("meta[name='_csrf']")?.content;
 const csrfHeader = document.querySelector("meta[name='_csrf_header']")?.content;
@@ -409,7 +409,54 @@ function onGroupMessageReceived(payload) {
   }
   displayGroupMessage(message, true);
 }
+// Kích thành viên
+async function kickMember(userId, displayName, uname) {
+  if (!currentChat || currentChat.type !== 'group') return;
+  if (!window.__isAdminOrOwnerForCurrentGroup) {
+    showErrorMessage('Bạn không có quyền thực hiện thao tác này.');
+    return;
+  }
 
+  const who = displayName || uname || ('ID ' + userId);
+  if (!confirm(`Loại ${who} khỏi nhóm?`)) return;
+
+  try {
+    let ok = false, errTxt = '';
+
+    // Thử endpoint REST chuẩn
+    try {
+      const r = await fetch(`/api/groups/${currentChat.id}/members/${userId}`, {
+        method: 'DELETE',
+        headers: { ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {}) }
+      });
+      ok = r.ok;
+      if (!ok) errTxt = await r.text().catch(()=>'');
+    } catch {}
+
+    // Fallback nếu BE dùng route khác (POST remove-member)
+    if (!ok) {
+      const r2 = await fetch(`/api/groups/${currentChat.id}/remove-member`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {})
+        },
+        body: JSON.stringify({ userId: Number(userId) })
+      });
+      ok = r2.ok;
+      if (!ok) errTxt = await r2.text().catch(()=> '');
+    }
+
+    if (!ok) throw new Error(errTxt || 'Không xóa được thành viên.');
+
+    showSuccessMessage('Đã kick thành viên khỏi nhóm.');
+    await loadGroupMemberNicknames(currentChat.id); // refresh danh sách
+    scheduleSidebarRefresh();                       // làm mới sidebar/đếm thành viên
+  } catch (e) {
+    console.error(e);
+    showErrorMessage('Kick thất bại.');
+  }
+}
 
 function onFriendRequestReceived(payload) {
   const notification = JSON.parse(payload.body);
@@ -2355,6 +2402,7 @@ async function updateGroupActionButtons(groupId) {
   // Nếu không ở phòng nhóm → ẩn toàn bộ action
   if (!currentChat || currentChat.type !== 'group') {
     groupActions?.classList.add('hidden');
+    window.__isAdminOrOwnerForCurrentGroup = false; // 👈 reset
     return;
   }
 
@@ -2385,6 +2433,7 @@ async function updateGroupActionButtons(groupId) {
     const isAdminOrOwner =
         roleName === 'Admin' || roleName === 'Owner' ||
         !!(me.admin || me.owner || me.isAdmin || me.isOwner);
+    window.__isAdminOrOwnerForCurrentGroup = !!isAdminOrOwner;
 
     if (isAdminOrOwner) {
       deleteBtn?.classList.remove('hidden'); // cho phép Xoá nhóm
@@ -2626,29 +2675,38 @@ function renderMemberRow(member) {
   const role     = getMemberRoleLabel(member);
   const avatarUrlRaw = getMemberAvatarUrl(member);
   const avatarUrl    = avatarUrlRaw ? __bust(avatarUrlRaw) : null;
-
+  const canKick = !!window.__isAdminOrOwnerForCurrentGroup
+      && (member.username !== username)
+      && (role !== 'Owner');
   const row = document.createElement('div');
   row.className = "flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800";
 
   row.innerHTML = `
-    <div class="relative flex-shrink-0">
-      ${renderAvatar(avatarUrl, initials, gradient, 10)}
-    </div>
-    <div class="min-w-0 flex-1">
-      <div class="flex items-center gap-2">
-        <div class="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">${name}</div>
-        <button class="nickname-btn px-2 py-1 text-xs rounded-lg border
-                       hover:bg-gray-100 dark:hover:bg-gray-700"
+  <div class="relative flex-shrink-0">
+    ${renderAvatar(avatarUrl, initials, gradient, 10)}
+  </div>
+  <div class="min-w-0 flex-1">
+    <div class="flex items-center gap-2">
+      <div class="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">${name}</div>
+      <button class="nickname-btn px-2 py-1 text-xs rounded-lg border
+                     hover:bg-gray-100 dark:hover:bg-gray-700"
+              data-user-id="${id}">
+        Đổi biệt danh
+      </button>
+      ${canKick ? `
+        <button class="kick-btn px-2 py-1 text-xs rounded-lg border border-red-300
+                       text-red-600 hover:bg-red-50 dark:hover:bg-gray-800"
                 data-user-id="${id}">
-          Đổi biệt danh
-        </button>
-      </div>
-      <div class="text-xs text-gray-500 dark:text-gray-400">
-        Role: ${role}${member.username ? ` • @${member.username}` : ''}
-      </div>
-      ${member.nickname ? `<div class="text-xs text-gray-400 mt-0.5">Biệt danh: ${escapeHtml(member.nickname)}</div>` : ''}
+          Kick thành viên
+        </button>` : ``}
     </div>
-  `;
+    <div class="text-xs text-gray-500 dark:text-gray-400">
+      Role: ${role}${member.username ? ` • @${member.username}` : ''}
+    </div>
+    ${member.nickname ? `<div class="text-xs text-gray-400 mt-0.5">Biệt danh: ${escapeHtml(member.nickname)}</div>` : ''}
+  </div>
+`;
+
 
   // click "Đổi biệt danh"
   row.querySelector('.nickname-btn')?.addEventListener('click', async () => {
@@ -2657,7 +2715,10 @@ function renderMemberRow(member) {
     if (nick === null) return;             // hủy
     await updateOneMemberNickname(id, nick.trim());
   });
-
+  // click "Kick thành viên"
+  row.querySelector('.kick-btn')?.addEventListener('click', async () => {
+    await kickMember(id, name, member.username);
+  });
   return row;
 }
 
