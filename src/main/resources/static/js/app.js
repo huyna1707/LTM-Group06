@@ -11,6 +11,18 @@ const csrfHeader = document.querySelector("meta[name='_csrf_header']")?.content;
 const DEFAULT_AVATAR_URL = '/images/defaultAvt.jpg';
 const avatarCache = new Map(); // username => url
 
+
+// Xóa và rơì nhóm
+const groupActions   = document.getElementById('groupActions');
+const leaveGroupBtn  = document.getElementById('leaveGroupBtn');
+const deleteGroupBtn = document.getElementById('deleteGroupBtn');
+
+leaveGroupBtn?.addEventListener('click', leaveCurrentGroup);
+deleteGroupBtn?.addEventListener('click', deleteCurrentGroup);
+
+
+
+
 const editMailInput  = $("#editMail");
 const editPhoneInput = $("#editPhone");
 let   currentProfile = null; // nhớ profile mới nhất lấy từ server
@@ -256,24 +268,128 @@ function onPrivateMessageReceived(payload) {
   }
   updateChatListWithNewMessage();
 }
+function updateHeaderMemberCount(n) {
+  const appStatusText = document.getElementById('appStatusText');
+  if (appStatusText && Number.isFinite(n)) {
+    appStatusText.textContent = `${n} thành viên`;
+  }
+}
+
 function onGroupMessageReceived(payload) {
   const message = normalizeIncomingMessage(JSON.parse(payload.body));
+
+  // === ĐỔI AVATAR NHÓM ===
+  if (message?.event === 'GROUP_AVATAR_CHANGED') {
+    const gid = String(message.groupId);
+    const url = message.avatarUrl || '';
+    if (currentChat?.type === 'group' && String(currentChat.id) === gid) {
+      applyGroupHeaderAvatar?.(url, currentChat.name);
+      currentChat.avatarUrl = url;
+    }
+    patchGroupSidebarAvatar?.(gid, url, currentChat?.name);
+    scheduleSidebarRefresh();
+    showNotificationToast(url ? 'Avatar nhóm đã được cập nhật.' : 'Avatar nhóm đã được gỡ.', 'info');
+    return;
+  }
+
+  // === RỜI NHÓM ===
+  if (message?.event === 'GROUP_MEMBER_LEFT') {
+    const isThisRoom = currentChat?.type === 'group' && String(currentChat.id) === String(message.groupId);
+    const whoName = (message.username === username) ? 'Bạn'
+        : (message.fullName || message.username || 'Thành viên');
+
+    if (isThisRoom) {
+      const div = document.createElement('div');
+      div.className = 'flex justify-center my-4';
+      div.innerHTML = `<div class="glass-effect px-6 py-3 rounded-full text-sm text-red-600 dark:text-red-300">
+                         ${whoName} đã rời khỏi phòng chat 👋
+                       </div>`;
+      chatMessages?.appendChild(div);
+      scrollToBottom();
+
+      // Cập nhật bộ đếm nếu server gửi activeCount, nếu không thì giảm tạm 1
+      if (typeof message.activeCount === 'number') {
+        updateHeaderMemberCount(message.activeCount);
+      } else {
+        const appStatusText = document.getElementById('appStatusText');
+        const m = appStatusText?.textContent?.match(/(\d+)/);
+        if (m) {
+          const n = Math.max(0, (parseInt(m[1], 10) || 0) - 1);
+          updateHeaderMemberCount(n);
+        }
+      }
+
+      // Refresh nickname list để ẩn người đã rời (yêu cầu BE lọc isActive=true)
+      if (typeof loadGroupMemberNicknames === 'function') {
+        loadGroupMemberNicknames(currentChat.id);
+      }
+      scheduleSidebarRefresh();
+
+      // Nếu chính mình rời phòng đang mở → khoá composer và điều hướng nhẹ
+      if (message.username === username) {
+        showNotificationToast('Bạn đã rời nhóm', 'info');
+        messageInput?.setAttribute('disabled', 'true');
+        sendButton?.setAttribute('disabled', 'true');
+        groupActions?.classList.add('hidden');
+        setTimeout(() => {
+          if (typeof switchToPublicChat === 'function') switchToPublicChat();
+          else location.reload();
+        }, 800);
+      } else {
+        showNotificationToast(`${whoName} đã rời nhóm`, 'info');
+      }
+    } else {
+      // Ở phòng khác: chỉ toast + refresh list
+      showNotificationToast(`${whoName} đã rời một nhóm bạn tham gia`, 'info');
+      scheduleSidebarRefresh();
+    }
+    return;
+  }
+
+  // === XÓA NHÓM ===
+  if (message?.event === 'GROUP_DELETED') {
+    if (currentChat?.type === 'group' && String(currentChat.id) === String(message.groupId)) {
+      const div = document.createElement('div');
+      div.className = 'flex justify-center my-4';
+      div.innerHTML = `<div class="glass-effect px-6 py-3 rounded-full text-sm text-red-600 dark:text-red-300">
+                         Nhóm "${message.groupName || ''}" đã bị xoá bởi quản trị viên 🗑️
+                       </div>`;
+      chatMessages?.appendChild(div);
+      scrollToBottom();
+
+      showNotificationToast(`Nhóm đã bị xoá`, 'error');
+
+      // Khoá composer & ẩn hành động nhóm
+      messageInput?.setAttribute('disabled', 'true');
+      sendButton?.setAttribute('disabled', 'true');
+      groupActions?.classList.add('hidden');
+
+      scheduleSidebarRefresh();
+
+      setTimeout(() => {
+        if (typeof switchToPublicChat === 'function') switchToPublicChat();
+        else location.reload();
+      }, 1000);
+    } else {
+      showNotificationToast(`Một nhóm bạn tham gia đã bị xoá`, 'error');
+      scheduleSidebarRefresh();
+    }
+    return;
+  }
+
+  // === Tin nhắn thường (giữ nguyên) ===
   const msgGroupId = message.groupId ?? message.chatId ?? message.group?.id;
   if (!(currentChat?.type === 'group' && currentChat?.id == msgGroupId)) {
     updateChatListWithNewMessage();
     return;
   }
-
   const hasAtt = Array.isArray(message.attachments) && message.attachments.length > 0;
   const mid = message.id || null;
 
   if (mid) {
     const prev = groupMsgIndex.get(mid);
     if (prev) {
-
-      if (prev.hasAtt || !hasAtt) {
-        return;
-      }
+      if (prev.hasAtt || !hasAtt) return;
       updateGroupMessageBubble(message);
       groupMsgIndex.set(mid, { hasAtt: true });
       return;
@@ -283,9 +399,9 @@ function onGroupMessageReceived(payload) {
       return;
     }
   }
-
   displayGroupMessage(message, true);
 }
+
 
 function onFriendRequestReceived(payload) {
   const notification = JSON.parse(payload.body);
@@ -380,14 +496,16 @@ function patchSidebarAvatar(username, url, displayName) {
 function createGroupItem(group) {
   const initials = getInitials(group.name);
   const gradient = pickGradient(simpleHash(group.name||''));
+
   const w = document.createElement('div');
   w.className = "chat-item p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors";
   w.onclick = () => switchToGroupChat(group);
+
+  w.setAttribute('data-group-id', group.id); // 👈 để patch sau
   w.innerHTML = `
     <div class="flex items-center space-x-3">
-      <div class="relative">
-        <div class="w-10 h-10 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center"><span class="text-white text-sm font-medium">${initials}</span></div>
-        <div class="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-white dark:border-gray-900"></div>
+      <div class="relative" data-group-avatar-for="${group.id}">
+        ${renderAvatar(group.avatarUrl, initials, gradient, 10)}
       </div>
       <div class="flex-1 min-w-0">
         <h4 class="chat-name font-medium text-gray-900 dark:text-white truncate text-sm">${group.name}</h4>
@@ -396,6 +514,20 @@ function createGroupItem(group) {
     </div>`;
   return w;
 }
+
+function patchGroupSidebarAvatar(groupId, url, name) {
+  const gid = String(groupId);
+  const esc = (window.CSS && typeof CSS.escape === 'function')
+      ? CSS.escape(gid)
+      : gid.replace(/"/g, '\\"');
+  const holder = document.querySelector(`[data-group-avatar-for="${esc}"]`);
+  if (!holder) return;
+
+  const initials = getInitials(name || '');
+  const gradient = pickGradient(simpleHash(name || ''));
+  holder.innerHTML = renderAvatar(url, initials, gradient, 10);
+}
+
 
 /* ========================================================
    CHAT TITLE NICKNAME (per room)
@@ -424,50 +556,57 @@ function defaultTitleForCurrentChat(){
   }
   return 'WebChat Pro';
 }
-function applyTitleNicknameFromStorage(){
-  if (!currentChat) return;
-  // Riêng PRIVATE: bỏ cơ chế nickname theo "title", luôn hiển thị theo biệt danh partner
-  if (currentChat.type === 'private') {
-    updatePrivateHeaderTitleWithNickname();
-    return;
-  }
-  const key = titleKeyForCurrentChat();
-  const nick = localStorage.getItem(key) || '';
-  if (chatTitleEl) chatTitleEl.textContent = nick || defaultTitleForCurrentChat();
-  if (chatNicknameInput) chatNicknameInput.value = nick;
-}
-applyNicknameBtn?.addEventListener('click', async () => {
-  if (!currentChat) return;
-  const nickname = (chatNicknameInput?.value || '').trim();
+function applyTitleNicknameFromStorage() {
+    if (!currentChat) return;
 
-  try {
     if (currentChat.type === 'private') {
-      const res = await fetch(`/api/private-chats/${currentChat.id}/nickname`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {})
-        },
-        body: JSON.stringify({ nickname: newNickname })
-      });
-
-      if (!res.ok) {
-        showErrorMessage('Không lưu được biệt danh.');
+        updatePrivateHeaderTitleWithNickname();
         return;
-      }
-      const data = await res.json();
-      showSuccessMessage('Đã lưu biệt danh!');
-      document.getElementById('chatTitle').textContent = data.nickname || currentChat.friendUsername;
-
-
-      // Cập nhật header ngay
-      const headerName = data.nickname || currentChat.name || currentChat.friendUsername || 'Người dùng';
-      const chatTitle  = document.getElementById('chatTitle');
-      if (chatTitle) chatTitle.textContent = `Chat với ${headerName}`;
-
-      showSuccessMessage('Đã lưu biệt danh private.');
-      return;
     }
+
+    // GROUP / PUBLIC giữ nguyên logic lưu trong localStorage
+    const key  = titleKeyForCurrentChat();
+    const nick = (localStorage.getItem(key) || '').trim();
+    if (chatTitleEl) chatTitleEl.textContent = nick || defaultTitleForCurrentChat();
+    if (chatNicknameInput) chatNicknameInput.value = nick;
+}
+
+
+applyNicknameBtn?.addEventListener('click', async () => {
+    if (!currentChat) return;
+    const nickname = (chatNicknameInput?.value || '').trim();
+
+    try {
+        if (currentChat.type === 'private') {
+            const res = await fetch(`/api/private-chats/${currentChat.id}/nickname`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {})
+                },
+                body: JSON.stringify({ nickname })
+            });
+
+            if (!res.ok) {
+                showErrorMessage('Không lưu được biệt danh.');
+                return;
+            }
+
+            const data = await res.json();
+
+            // ✅ Cập nhật map bằng dữ liệu server trả về
+            const scope = `private:${currentChat.id}`;
+            if (currentChat.friendId) {
+                memberNickMap.set(`${scope}|id:${String(currentChat.friendId)}`, data.nickname || '');
+            }
+            if (currentChat.friendUsername) {
+                memberNickMap.set(`${scope}|u:${currentChat.friendUsername}`, data.nickname || '');
+            }
+
+            showSuccessMessage('Đã lưu biệt danh!');
+            updatePrivateHeaderTitleWithNickname(); // ✅ header cập nhật sau khi lưu
+            return;
+        }
 
     // GROUP: giữ nguyên cách cũ của bạn hoặc cũng dùng API nhóm nếu đã mở
     const res = await fetch(`/api/groups/${currentChat.id}/nickname`, {
@@ -516,7 +655,7 @@ async function switchToPrivateChat(friend) {
         friendId: friend.id,
         friendUsername: friend.username
       };
-
+      groupActions?.classList.add('hidden');
       updateChatHeader(getInitials(currentChat.name), `Chat với ${currentChat.name}`, 'Chat riêng tư');
 
       // 👉 nạp nickname partner từ server
@@ -537,16 +676,32 @@ async function switchToPrivateChat(friend) {
 }
 
 
-function switchToGroupChat(group) {
-  currentChat = { type: 'group', id: group.id, name: group.name };
+async function switchToGroupChat(group) {
+  currentChat = {
+    type: 'group',
+    id: group.id,
+    name: group.name,
+    avatarUrl: group.avatarUrl || ''
+  };
+
   updateChatHeader(getInitials(group.name), group.name, `${group.memberCount} thành viên`);
+
+  // nếu không có avatarUrl trong list → lấy từ DB
+  if (!currentChat.avatarUrl) {
+    try {
+      const r = await fetch(`/api/groups/${currentChat.id}`, { headers: csrfHeader ? { [csrfHeader]: csrfToken } : {} });
+      if (r.ok) {
+        const g = await r.json();
+        currentChat.avatarUrl = g.avatarUrl || '';
+      }
+    } catch {}
+  }
+  applyGroupHeaderAvatar(currentChat.avatarUrl, currentChat.name);
+
   applyTitleNicknameFromStorage();
   initBlockToggleForCurrentChat();
-
-  // Tải nickname trước, sau đó reload history để hiển thị đúng
-  loadGroupMemberNicknames(group.id).then(()=>{
-    loadGroupChatHistory(group.id);
-  });
+  loadGroupMemberNicknames(group.id).then(() => loadGroupChatHistory(group.id));
+  updateGroupActionButtons(group.id);
 }
 
 /* ========================================================
@@ -1764,9 +1919,6 @@ async function saveMemberNicknames(){
 document.getElementById('savePrivateNicknameBtn')
     ?.addEventListener('click', savePrivateNickname);
 
-// Tách save privatechat ra riêng
-document.getElementById('savePrivateNicknameBtn')
-    ?.addEventListener('click', savePrivateNickname);
 
 // Hàm lưu biệt danh
 async function savePrivateNickname() {
@@ -1968,19 +2120,20 @@ async function enrichAvatarsFromAPI(friends = []) {
    HEADER PRIVATE: HIỂN THỊ THEO BIỆT DANH (tách khỏi nhóm)
 ======================================================== */
 function updatePrivateHeaderTitleWithNickname() {
-  if (!currentChat || currentChat.type !== 'private') return;
+    if (!currentChat || currentChat.type !== 'private') return;
 
-  const scope = `private:${currentChat.id}`;
-  const byId = currentChat.friendId != null ? memberNickMap.get(`${scope}|id:${String(currentChat.friendId)}`) : null;
-  const byUsr = currentChat.friendUsername ? memberNickMap.get(`${scope}|u:${currentChat.friendUsername}`) : null;
+    const scope = `private:${currentChat.id}`;
+    const byId  = currentChat.friendId != null ? memberNickMap.get(`${scope}|id:${String(currentChat.friendId)}`) : null;
+    const byUsr = currentChat.friendUsername ? memberNickMap.get(`${scope}|u:${currentChat.friendUsername}`) : null;
+    const savedNick = (byId || byUsr || '').trim();  // ✅ chỉ lấy từ map (dữ liệu đã lưu)
 
-  const nick = (byId || byUsr || '').trim();
-  const base = currentChat.name || currentChat.friendUsername || 'Người dùng';
-  const nameForHeader = nick || base;
+    const base = currentChat.name || currentChat.friendUsername || 'Người dùng';
+    const headerName = savedNick ? `${savedNick} (${base})` : base;
 
-  const chatTitle = document.getElementById('chatTitle');
-  if (chatTitle) chatTitle.textContent = `Chat với ${nameForHeader}`;
+    const chatTitle = document.getElementById('chatTitle');
+    if (chatTitle) chatTitle.textContent = `${headerName}`;
 }
+
 
 
 
@@ -2071,22 +2224,6 @@ onGroupMessageReceived = function(payload) {
   return __orig_onGroupMessageReceived.call(this, payload);
 };
 
-/* ========================================================
-   KHI GÕ BIỆT DANH Ở PRIVATE → CẬP NHẬT HEADER TỨC THỜI
-======================================================== */
-document.addEventListener('input', (e) => {
-  const inp = e.target;
-  if (!inp || inp.tagName !== 'INPUT') return;
-  if (!currentChat || currentChat.type !== 'private') return;
-
-  if (inp.id === 'privateNicknameInput') {  // ✅ sửa điều kiện
-    const temp = (inp.value || '').trim();
-    const fallbackName = currentChat.name || currentChat.friendUsername || 'Người dùng';
-    const nameForHeader = temp || fallbackName;
-    const chatTitle = document.getElementById('chatTitle');
-    if (chatTitle) chatTitle.textContent = `Chat với ${nameForHeader}`;
-  }
-});
 
 
 /* ========================================================
@@ -2191,7 +2328,295 @@ async function hydratePrivateNickname(chatId) {
   }
 }
 
+// hàm xử lý Xóa và rời nhóm
+async function leaveCurrentGroup() {
+  if (!currentChat || currentChat.type !== 'group') return;
+  if (!confirm(`Rời nhóm "${currentChat.name}"?`)) return;
+
+  try {
+    const res = await fetch(`/api/groups/${currentChat.id}/leave`, {
+      method: 'POST',
+      headers: { ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {}) }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    showSuccessMessage('Bạn đã rời nhóm.');
+    scheduleSidebarRefresh();
+    typeof switchToPublicChat === 'function' ? switchToPublicChat() : location.reload();
+  } catch (e) {
+    console.error(e);
+    showErrorMessage('Không rời nhóm được.');
+  } finally {
+    // đóng panel settings nếu muốn:
+    // closeChatSettingsPanel();
+  }
+}
+
+async function deleteCurrentGroup() {
+  if (!currentChat || currentChat.type !== 'group') return;
+  if (!confirm(`Xóa nhóm "${currentChat.name}" cho TẤT CẢ thành viên?`)) return;
+
+  try {
+    const res = await fetch(`/api/groups/${currentChat.id}`, {
+      method: 'DELETE',
+      headers: { ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {}) }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    showSuccessMessage('Đã xóa nhóm.');
+    scheduleSidebarRefresh();
+    typeof switchToPublicChat === 'function' ? switchToPublicChat() : location.reload();
+  } catch (e) {
+    console.error(e);
+    showErrorMessage('Không xóa nhóm được (chỉ Admin/Owner).');
+  } finally {
+    // closeChatSettingsPanel();
+  }
+}
 
 
 
 
+
+// === Add Members (Group) ===
+const addMembersBtn        = document.getElementById('addMembersBtn');
+const addMembersModal      = document.getElementById('addMembersModal');
+const closeAddMembersModal = document.getElementById('closeAddMembersModal');
+const cancelAddMembersBtn  = document.getElementById('cancelAddMembersBtn');
+const confirmAddMembersBtn = document.getElementById('confirmAddMembersBtn');
+const addMembersInput      = document.getElementById('addMembersInput');
+
+function openAddMembersModal() {
+  if (!currentChat || currentChat.type !== 'group') {
+    showErrorMessage('Chỉ thêm thành viên trong đoạn chat nhóm.');
+    return;
+  }
+  addMembersInput && (addMembersInput.value = '');
+  addMembersModal?.classList.remove('hidden');
+}
+function closeAddMembers() { addMembersModal?.classList.add('hidden'); }
+
+addMembersBtn   ?.addEventListener('click', openAddMembersModal);
+closeAddMembersModal?.addEventListener('click', closeAddMembers);
+cancelAddMembersBtn ?.addEventListener('click', closeAddMembers);
+addMembersModal ?.addEventListener('click', (e)=>{ if (e.target === addMembersModal) closeAddMembers(); });
+
+confirmAddMembersBtn?.addEventListener('click', addMembersToCurrentGroup);
+
+async function addMembersToCurrentGroup() {
+  if (!currentChat || currentChat.type !== 'group') return;
+
+  const raw = (addMembersInput?.value || '').trim();
+  if (!raw) {
+    showErrorMessage('Vui lòng nhập danh sách người dùng.');
+    showNotificationToast('Vui lòng nhập danh sách người dùng', 'error');
+    return;
+  }
+
+  // chống double-click
+  confirmAddMembersBtn?.setAttribute('disabled', 'true');
+
+  try {
+    const res = await fetch(`/api/groups/${currentChat.id}/members`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {})
+      },
+      body: JSON.stringify({ membersRaw: raw })
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || data.success === false) {
+      const msg = data?.message || 'Không thêm được thành viên.';
+      showErrorMessage(msg);
+      showNotificationToast(msg, 'error');
+      return;
+    }
+
+    const r = data.result || {};
+    const added       = r.added       || [];
+    const reactivated = r.reactivated || [];
+    const existed     = r.existed     || [];
+    const notFound    = r.notFound    || [];
+
+    // Ghép thông điệp chi tiết
+    const parts = [];
+    if (added.length)       parts.push(`+ Thêm mới: ${added.join(', ')}`);
+    if (reactivated.length) parts.push(`+ Kích hoạt lại: ${reactivated.join(', ')}`);
+    if (existed.length)     parts.push(`+ Đã là thành viên: ${existed.join(', ')}`);
+    if (notFound.length)    parts.push(`+ Không tìm thấy: ${notFound.join(', ')}`);
+
+    // Chọn tone: success / warning
+    const hasSuccess = (added.length + reactivated.length) > 0;
+    const tone = hasSuccess ? 'success' : (notFound.length ? 'error' : 'info');
+
+    showSuccessMessage(parts.join('<br>'));
+    showNotificationToast(
+        hasSuccess ? 'Đã thêm thành viên vào nhóm!' :
+            notFound.length ? 'Một số thành viên không tìm thấy.' :
+                'Không có thay đổi.',
+        tone
+    );
+
+    // Cập nhật UI
+    await loadGroupMemberNicknames(currentChat.id);
+    await loadGroupChatHistory(currentChat.id);
+    scheduleSidebarRefresh();
+
+    closeAddMembers();
+  } catch (e) {
+    console.error(e);
+    showErrorMessage('Không thêm được thành viên.');
+    showNotificationToast('Không thêm được thành viên', 'error');
+  } finally {
+    confirmAddMembersBtn?.removeAttribute('disabled');
+  }
+}
+
+// GỘP LẠI – chỉ giữ MỘT bản duy nhất trong file
+async function updateGroupActionButtons(groupId) {
+  // Nếu không ở phòng nhóm → ẩn toàn bộ action
+  if (!currentChat || currentChat.type !== 'group') {
+    groupActions?.classList.add('hidden');
+    return;
+  }
+
+  // Mặc định: hiển thị khung hành động, chỉ ẩn các nút đặc quyền
+  groupActions?.classList.remove('hidden');
+
+  const leaveBtn  = document.getElementById('leaveGroupBtn');
+  const deleteBtn = document.getElementById('deleteGroupBtn');
+  const addBtn    = document.getElementById('addMembersBtn');
+  const changeBtn = document.getElementById('changeGroupAvatarBtn');
+  const removeBtn = document.getElementById('removeGroupAvatarBtn');
+
+  // reset trạng thái nút
+  leaveBtn ?.classList.remove('hidden'); // ai cũng thấy nút Rời nhóm
+  deleteBtn?.classList.add('hidden');
+  addBtn   ?.classList.add('hidden');
+  changeBtn?.classList.add('hidden');
+  removeBtn?.classList.add('hidden');
+
+  try {
+    const res = await fetch(`/api/groups/${groupId}/me`, {
+      headers: csrfHeader ? { [csrfHeader]: csrfToken } : {}
+    });
+    if (!res.ok) return;
+
+    const me = await res.json(); // { role, admin, owner }
+    const isAdminOrOwner = !!(me?.admin || me?.owner);
+
+    if (isAdminOrOwner) {
+      deleteBtn?.classList.remove('hidden'); // cho phép Xoá nhóm
+      addBtn   ?.classList.remove('hidden'); // thêm thành viên
+      changeBtn?.classList.remove('hidden'); // đổi ảnh nhóm
+      removeBtn?.classList.remove('hidden'); // gỡ ảnh nhóm
+    }
+  } catch (e) {
+    console.error('updateGroupActionButtons', e);
+  }
+}
+
+const changeGroupAvatarBtn = document.getElementById('changeGroupAvatarBtn');
+const groupAvatarFile      = document.getElementById('groupAvatarFile');
+const removeGroupAvatarBtn = document.getElementById('removeGroupAvatarBtn');
+
+
+// tránh bind trùng
+if (!window.__groupAvatarHandlersBound) {
+  changeGroupAvatarBtn?.addEventListener('click', () => groupAvatarFile?.click());
+
+  groupAvatarFile?.addEventListener('change', async (e) => {
+    const f = e.target.files?.[0];
+    // cho phép chọn lại cùng file lần sau
+    e.target.value = '';
+    if (!f) return;
+
+    if (f.size > 2 * 1024 * 1024) { showErrorMessage('Ảnh quá lớn (> 2MB).'); return; }
+    if (!/^image\//i.test(f.type)) { showErrorMessage('Vui lòng chọn ảnh.'); return; }
+    if (!currentChat || currentChat.type !== 'group') { showErrorMessage('Không xác định nhóm.'); return; }
+
+    try {
+      // 1) Upload -> lấy URL file
+      const up = await uploadOneFile(f);
+      if (!up?.url) throw new Error('UPLOAD_FAIL');
+
+      // 2) PATCH avatar nhóm
+      const res = await fetch(`/api/groups/${currentChat.id}/avatar`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {}) },
+        body: JSON.stringify({ url: up.url })
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(()=>'');
+        throw new Error(`PATCH_FAIL_${res.status} ${txt}`);
+      }
+
+      // 3) Cập nhật UI NGAY (khỏi phải up lần 2)
+      currentChat.avatarUrl = up.url;
+      patchGroupSidebarAvatar?.(currentChat.id, up.url, currentChat.name);
+      applyGroupHeaderAvatar?.(up.url, currentChat.name);
+
+      // toast nên chờ WS; nếu muốn báo ngay thì bật dòng dưới
+      // showSuccessMessage('Đã đổi ảnh nhóm!');
+    } catch (err) {
+      console.error(err);
+      showErrorMessage('Không đổi được ảnh nhóm.');
+    }
+  });
+
+  removeGroupAvatarBtn?.addEventListener('click', async () => {
+    if (!currentChat || currentChat.type !== 'group') return;
+    try {
+      const res = await fetch(`/api/groups/${currentChat.id}/avatar`, {
+        method: 'DELETE',
+        headers: { ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {}) }
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(()=>'');
+        throw new Error(`DELETE_FAIL_${res.status} ${txt}`);
+      }
+      currentChat.avatarUrl = '';
+      patchGroupSidebarAvatar?.(currentChat.id, '', currentChat.name);
+      applyGroupHeaderAvatar?.('', currentChat.name);
+      // showSuccessMessage('Đã gỡ ảnh nhóm!');
+    } catch (err) {
+      console.error(err);
+      showErrorMessage('Không gỡ được ảnh nhóm.');
+    }
+  });
+
+  window.__groupAvatarHandlersBound = true;
+}
+
+function applyGroupHeaderAvatar(url, name) {
+  const img    = document.getElementById('chatHeaderAvatarImg');
+  const fb     = document.getElementById('chatHeaderAvatarFallback');
+  const fbText = document.getElementById('chatHeaderAvatarFallbackText');
+  if (!img || !fb) return;
+
+  const initials = getInitials(name || '');
+  const gradient = pickGradient(simpleHash(name || ''));
+
+  fb.className = `w-12 h-12 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center`;
+  if (fbText) fbText.textContent = initials || '🌐';
+
+  if (url && url.trim() !== '') {
+    img.onload  = () => { img.classList.remove('hidden'); fb.classList.add('hidden'); };
+    img.onerror = () => { img.classList.add('hidden');   fb.classList.remove('hidden'); };
+    img.src = __bust(url);
+  } else {
+    img.classList.add('hidden');
+    fb.classList.remove('hidden');
+  }
+}
+function __bust(url) { // tránh cache ảnh cũ
+  if (!url) return '';
+  try {
+    const u = new URL(url, location.origin);
+    u.searchParams.set('t', Date.now());
+    return u.toString();
+  } catch {
+    return url + (url.includes('?') ? '&' : '?') + 't=' + Date.now();
+  }
+}

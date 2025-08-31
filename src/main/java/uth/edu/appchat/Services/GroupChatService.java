@@ -5,24 +5,19 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import uth.edu.appchat.Dtos.CreateGroupForm;
-import uth.edu.appchat.Dtos.GroupDTO;
-import uth.edu.appchat.Dtos.GroupMessageDTO;
-import uth.edu.appchat.Dtos.UserDTO;
-import uth.edu.appchat.Dtos.MemberNicknameDTO;
-
+import uth.edu.appchat.Dtos.*;
 import uth.edu.appchat.Models.GroupChat;
 import uth.edu.appchat.Models.GroupMember;
 import uth.edu.appchat.Models.GroupMessage;
 import uth.edu.appchat.Models.User;
-
 import uth.edu.appchat.Repositories.GroupChatRepository;
 import uth.edu.appchat.Repositories.GroupMemberRepository;
 import uth.edu.appchat.Repositories.GroupMessageRepository;
 import uth.edu.appchat.Repositories.UserRepository;
-import uth.edu.appchat.Repositories.UserBlockRepository;
-
+import uth.edu.appchat.Dtos.AddMembersRequest;
+import uth.edu.appchat.Dtos.AddMembersResult;
+import java.util.*;
+import java.util.stream.Stream;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,7 +32,7 @@ public class GroupChatService {
     private final UserRepository userRepo;
 
     /* =========================
-       Các hàm cũ giữ nguyên
+       Tạo nhóm & các hàm đang có
        ========================= */
     public GroupChat createGroup(CreateGroupForm form, User creator) {
         GroupChat group = new GroupChat();
@@ -62,16 +57,16 @@ public class GroupChatService {
             member.setRole(user.equals(group.getCreatedBy())
                     ? GroupMember.GroupRole.ADMIN
                     : GroupMember.GroupRole.MEMBER);
-            // nếu entity có cờ isActive/joinedAt, bạn có thể set ở đây
             groupMemberRepo.save(member);
         }
     }
 
+    // Services/GroupChatService.java
     public List<GroupDTO> getMyGroups() {
         Long userId = getCurrentUserId();
         List<GroupChat> groups = groupMemberRepo.findActiveGroupsByUserId(userId);
         return groups.stream()
-                .map(group -> new GroupDTO(group.getId(), group.getName(), group.getMemberCount()))
+                .map(g -> new GroupDTO(g.getId(), g.getName(), g.getMemberCount(), g.getAvatarUrl()))
                 .collect(Collectors.toList());
     }
 
@@ -100,7 +95,6 @@ public class GroupChatService {
                 ))
                 .collect(Collectors.toList());
     }
-
 
     public GroupMessageDTO sendGroupMessage(Long groupId, String content) {
         Long userId = getCurrentUserId();
@@ -140,13 +134,11 @@ public class GroupChatService {
     }
 
     /* =========================
-       THÊM MỚI CHO "BIỆT DANH"
+       Biệt danh thành viên
        ========================= */
-
-    // GET /api/groups/{groupId}/members-with-nickname
     @Transactional(readOnly = true)
     public List<MemberNicknameDTO> getMembersWithNickname(Long groupId) {
-        var members = groupMemberRepo.findByGroupIdWithUser(groupId); // <- cần method này ở repo
+        var members = groupMemberRepo.findByGroupIdWithUser(groupId);
         List<MemberNicknameDTO> out = new ArrayList<>();
         for (GroupMember gm : members) {
             User u = gm.getUser();
@@ -154,19 +146,17 @@ public class GroupChatService {
                     u.getId(),
                     u.getUsername(),
                     u.getFullName(),
-                    gm.getNickname() // field đã thêm trong GroupMember
+                    gm.getNickname()
             ));
         }
         return out;
     }
 
-    // POST /api/groups/{groupId}/nicknames
     @Transactional
     public void saveMemberNicknames(Long groupId, String updaterUsername, List<MemberNicknameDTO> payload) {
         User updater = userRepo.findByUsername(updaterUsername)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        // Chỉ cho phép thành viên nhóm cập nhật
         boolean isMember = groupMemberRepo.existsByGroupChatIdAndUserId(groupId, updater.getId());
         if (!isMember) throw new AccessDeniedException("Bạn không thuộc nhóm này");
 
@@ -182,7 +172,6 @@ public class GroupChatService {
         }
     }
 
-    private final UserBlockRepository blockRepo;
     public void clearGroupForMe(Long groupId) {
         Long userId = getCurrentUserId();
         GroupMember me = groupMemberRepo.findByGroupChatIdAndUserId(groupId, userId)
@@ -191,8 +180,182 @@ public class GroupChatService {
         groupMemberRepo.save(me);
     }
 
-    
+    /* =========================
+       Rời nhóm / Xóa nhóm
+       ========================= */
+
+    @Transactional
+    public void deleteGroup(Long groupId) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+
+        GroupChat group = groupChatRepo.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy nhóm."));
+
+        boolean isOwner = group.getCreatedBy() != null
+                && username.equals(group.getCreatedBy().getUsername());
+
+        boolean isAdmin = groupMemberRepo
+                .findByGroupChatIdAndUserUsernameAndIsActiveTrue(groupId, username)
+                .map(gm -> gm.getRole() == GroupMember.GroupRole.ADMIN)
+                .orElse(false);
+
+        if (!isOwner && !isAdmin) {
+            throw new AccessDeniedException("Bạn không có quyền xóa nhóm này.");
+        }
+
+        groupChatRepo.delete(group);
+    }
+    @Transactional(readOnly = true)
+    public GroupMembershipDTO getMyMembership(Long groupId) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+
+        var gm = groupMemberRepo
+                .findByGroupChatIdAndUserUsernameAndIsActiveTrue(groupId, username)
+                .orElseThrow(() -> new IllegalArgumentException("Bạn không còn là thành viên đang hoạt động của nhóm."));
+
+        var group = gm.getGroupChat();
+        boolean isOwner = group.getCreatedBy() != null
+                && username.equals(group.getCreatedBy().getUsername());
+
+        var role = gm.getRole() != null ? gm.getRole().name() : "MEMBER";
+        boolean isAdmin = gm.getRole() == GroupMember.GroupRole.ADMIN;
+
+        return new GroupMembershipDTO(role, isAdmin, isOwner);
+    }
+
+    @Transactional
+    public AddMembersResult addMembers(Long groupId, AddMembersRequest req) {
+        String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
+
+        GroupChat group = groupChatRepo.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy nhóm."));
+
+        // Chỉ Owner hoặc Admin mới được thêm
+        boolean isOwner = group.getCreatedBy() != null
+                && currentUsername.equals(group.getCreatedBy().getUsername());
+
+        boolean isAdmin = groupMemberRepo
+                .findByGroupChatIdAndUserUsernameAndIsActiveTrue(groupId, currentUsername)
+                .map(gm -> gm.getRole() == GroupMember.GroupRole.ADMIN)
+                .orElse(false);
+
+        if (!isOwner && !isAdmin) {
+            throw new AccessDeniedException("Bạn không có quyền thêm thành viên.");
+        }
+
+        // Ghép members từ members[] + membersRaw
+        Set<String> identifiers = new LinkedHashSet<>();
+        if (req.getMembers() != null) identifiers.addAll(req.getMembers());
+        if (req.getMembersRaw() != null) {
+            Stream.of(req.getMembersRaw().split(","))
+                    .map(String::trim).filter(s -> !s.isBlank())
+                    .forEach(identifiers::add);
+        }
+
+        List<String> added = new ArrayList<>();
+        List<String> reactivated = new ArrayList<>();
+        List<String> existed = new ArrayList<>();
+        List<String> notFound = new ArrayList<>();
+
+        for (String idf : identifiers) {
+            // Tìm user theo username/phone/email
+            Optional<User> optU = userRepo.findByUsernameOrPhoneOrEmail(idf);
+            if (optU.isEmpty()) {
+                notFound.add(idf);
+                continue;
+            }
+            User u = optU.get();
+
+            // Không thêm lại chính mình nếu đã là member
+            Optional<GroupMember> existedGM = groupMemberRepo.findByGroupChatIdAndUserId(groupId, u.getId());
+
+            if (existedGM.isPresent()) {
+                GroupMember gm = existedGM.get();
+                if (Boolean.TRUE.equals(gm.getActive())) {
+                    existed.add(idf);
+                } else {
+                    // Reactivate
+                    gm.setActive(true);
+                    gm.setLeftAt(null);
+                    groupMemberRepo.save(gm);
+                    reactivated.add(idf);
+                }
+                continue;
+            }
+
+            // Tạo membership mới
+            GroupMember gm = new GroupMember();
+            gm.setGroupChat(group);
+            gm.setUser(u);
+            gm.setRole(GroupMember.GroupRole.MEMBER);
+            gm.setActive(true);
+            groupMemberRepo.save(gm);
+
+            added.add(idf);
+        }
+
+        // (Tuỳ chọn) cập nhật lastMessageAt để đẩy nhóm lên đầu danh sách
+        group.setLastMessageAt(LocalDateTime.now());
+        groupChatRepo.save(group);
+
+        return new AddMembersResult(added, reactivated, existed, notFound);
+    }
 
 
+    @Transactional
+    public void leaveGroup(Long groupId) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
 
+        // 1) Lấy membership đang ACTIVE của mình
+        GroupMember me = groupMemberRepo
+                .findByGroupChatIdAndUserUsernameAndIsActiveTrue(groupId, username)
+                .orElseThrow(() -> new IllegalArgumentException("Bạn không đang là thành viên hoạt động của nhóm."));
+
+        GroupChat group = me.getGroupChat();
+
+        // 2) Nếu mình là thành viên cuối cùng -> xoá cả nhóm
+        long activeCount = groupMemberRepo.countByGroupChatIdAndIsActiveTrue(groupId);
+        if (activeCount == 1) {
+            groupChatRepo.delete(group);
+            return;
+        }
+
+        boolean leavingIsAdmin = me.getRole() == GroupMember.GroupRole.ADMIN;
+
+        // 3) HARD DELETE: xoá hẳn record membership (không set isActive=false nữa)
+        groupMemberRepo.delete(me);
+
+        // 4) Nếu người rời là admin và không còn admin nào khác -> promote người vào sớm nhất
+        if (leavingIsAdmin) {
+            long adminLeft = groupMemberRepo
+                    .countByGroupChatIdAndRoleAndIsActiveTrue(groupId, GroupMember.GroupRole.ADMIN);
+
+            if (adminLeft == 0) {
+                groupMemberRepo.findFirstByGroupChatIdAndIsActiveTrueOrderByJoinedAtAsc(groupId)
+                        .ifPresent(promote -> {
+                            promote.setRole(GroupMember.GroupRole.ADMIN);
+                            // vì @Transactional nên chỉ cần set role là đủ
+                        });
+            }
+        }
+    }
+    @Transactional
+    public void setGroupAvatar(Long groupId, String byUsername, String url) {
+        GroupChat g = groupChatRepo.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy nhóm."));
+        boolean isOwner = g.getCreatedBy() != null && byUsername.equals(g.getCreatedBy().getUsername());
+        boolean isAdmin = groupMemberRepo
+                .findByGroupChatIdAndUserUsernameAndIsActiveTrue(groupId, byUsername)
+                .map(m -> m.getRole() == GroupMember.GroupRole.ADMIN)
+                .orElse(false);
+        if (!isOwner && !isAdmin) throw new AccessDeniedException("Bạn không có quyền đổi avatar nhóm.");
+
+        g.setAvatarUrl((url == null || url.isBlank()) ? null : url.trim());
+        groupChatRepo.save(g);
+    }
+
+    @Transactional
+    public void clearGroupAvatar(Long groupId, String byUsername) {
+        setGroupAvatar(groupId, byUsername, null);
+    }
 }

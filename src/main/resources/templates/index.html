@@ -127,9 +127,14 @@
       <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-6 flex items-center justify-between">
         <div class="flex items-center space-x-4">
           <div class="relative">
-            <div class="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-700 rounded-full flex items-center justify-center"><span class="text-white font-bold text-lg">🌐</span></div>
+            <img id="chatHeaderAvatarImg" class="w-12 h-12 rounded-full object-cover hidden" alt="Group avatar">
+            <div id="chatHeaderAvatarFallback"
+                 class="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-700 rounded-full flex items-center justify-center">
+              <span id="chatHeaderAvatarFallbackText" class="text-white font-bold text-lg">🌐</span>
+            </div>
             <div id="appStatusDot" class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-800"></div>
           </div>
+
           <div>
             <h1 id="chatTitle" class="text-xl font-bold text-gray-900 dark:text-white">Kênh chung</h1>
             <p id="appStatusText" class="text-sm text-gray-500 dark:text-gray-400">Đang hoạt động</p>
@@ -288,6 +293,39 @@
     </div>
   </div>
 </div>
+<!--Thêm thành viên Modal-->
+<div id="addMembersModal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
+  <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-96">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold text-gray-900 dark:text-white">Thêm thành viên</h2>
+      <button id="closeAddMembersModal" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>
+
+    <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+      Nhập <b>username / số điện thoại / email</b>, phân cách bằng dấu “,”
+    </p>
+    <input id="addMembersInput" type="text" placeholder="vd: alice,bob,0912345678,abc@gmail.com"
+           class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600
+                  bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 mb-4" />
+
+    <div class="flex justify-end gap-2">
+      <button id="cancelAddMembersBtn"
+              class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+        Hủy
+      </button>
+      <button id="confirmAddMembersBtn"
+              class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white">
+        Thêm
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Settings Drawer + overlay -->
 <div
         id="chatSettingsPanel"
@@ -402,6 +440,42 @@
 
     <div>
       <button id="clearChatBtn" class="w-full py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium">Xóa đoạn chat</button>
+    </div>
+    <div id="groupActions" class="space-y-2 mt-4 hidden">
+      <!-- hàng 2 nút nằm cạnh nhau -->
+      <div class="grid grid-cols-2 gap-2">
+        <button id="changeGroupAvatarBtn"
+                class="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white">
+          Đổi ảnh nhóm
+        </button>
+
+        <button id="removeGroupAvatarBtn"
+                class="w-full py-2 rounded-lg bg-gray-500 hover:bg-gray-600 text-white">
+          Gỡ ảnh nhóm
+        </button>
+      </div>
+
+      <!-- input file để JS trigger; để ngoài grid cũng được -->
+      <input id="groupAvatarFile" type="file" accept="image/*" class="hidden">
+
+      <button id="addMembersBtn"
+              class="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white">
+        Thêm thành viên
+      </button>
+
+      <button id="leaveGroupBtn"
+              class="w-full py-2 rounded-lg bg-gray-500 hover:bg-gray-600 text-white">
+        Rời nhóm
+      </button>
+
+      <button id="deleteGroupBtn"
+              class="w-full py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white hidden">
+        Xóa nhóm
+      </button>
+
+      <p class="text-xs text-gray-500 dark:text-gray-400">
+        * Chỉ Admin/Owner mới có thể xóa nhóm.
+      </p>
     </div>
   </div>
 </div>
