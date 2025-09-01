@@ -66,7 +66,13 @@ public class GroupChatService {
         Long userId = getCurrentUserId();
         List<GroupChat> groups = groupMemberRepo.findActiveGroupsByUserId(userId);
         return groups.stream()
-                .map(g -> new GroupDTO(g.getId(), g.getName(), g.getMemberCount(), g.getAvatarUrl()))
+                .map(g -> new GroupDTO(
+                        g.getId(),
+                        g.getName(),
+                        g.getMemberCount(),
+                        g.getAvatarUrl(),
+                        g.getNickname() // ctor GroupDTO nên tự xử lý effectiveTitle nếu có
+                ))
                 .collect(Collectors.toList());
     }
 

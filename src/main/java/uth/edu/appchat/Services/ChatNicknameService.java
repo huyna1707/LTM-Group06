@@ -52,7 +52,20 @@ public class ChatNicknameService {
         gc.setNicknameUpdatedAt(LocalDateTime.now());
         GroupChat saved = groupRepo.save(gc);
 
-        NicknameResponse resp = new NicknameResponse(
+        // Tiêu đề hiệu lực (nickname nếu có, không thì name gốc)
+        String effectiveTitle = (saved.getNickname() != null && !saved.getNickname().isBlank())
+                ? saved.getNickname()
+                : saved.getName();
+
+        // Event đơn giản cho FE
+        record GroupTitleChangedEvent(String event, Long groupId, String title) {}
+        GroupTitleChangedEvent evt = new GroupTitleChangedEvent("GROUP_TITLE_CHANGED", saved.getId(), effectiveTitle);
+
+        // Broadcast tới mọi thành viên của nhóm
+        ws.convertAndSend("/topic/groups/" + groupId, evt);
+
+        // Giữ nguyên response REST (nếu FE dùng)
+        return new NicknameResponse(
                 saved.getId(),
                 "GROUP",
                 saved.getNickname(),
@@ -60,10 +73,10 @@ public class ChatNicknameService {
                 saved.getNicknameUpdatedAt(),
                 saved.getVersion()
         );
-
-        ws.convertAndSend("/topic/groups/" + groupId + "/nickname", resp);
-        return resp;
     }
+
+
+
 
     /* ============ PRIVATE (viewer-scoped nickname) ============ */
     @Transactional

@@ -105,7 +105,6 @@ function addAttachmentPreview(att) {
 // === Render attachments trong bong bóng
 function renderAttachmentsHtml(attachments) {
   if (!Array.isArray(attachments) || attachments.length === 0) return '';
-
   const imgs = [];
   const vids = [];
   const files = [];
@@ -183,7 +182,6 @@ function renderAttachmentsHtml(attachments) {
 
   return parts.join('');
 }
-
 // --- Nhận diện URL file & chuẩn hoá message nhận về (URL → attachments[])
 function detectFileTypeFromUrl(url = '') {
   const u = url.toLowerCase();
@@ -324,7 +322,61 @@ function simpleHash(str) {
    WEBSOCKET + STOMP
 ======================================================== */
 let isConnected = false;
-let subs = {}; // lưu các subscription để tránh đăng ký trùng
+let subs = {};
+
+/* ==== Realtime: GROUP nickname (STATE + HANDLERS) ==== */
+// Đặt khối này TRƯỚC khi dùng nó ở nơi khác!
+window.__groupNick = window.__groupNick || {
+  groupNickSubs: new Map(),  // groupId -> subscription
+  pending: new Set()         // groupIds cần subscribe khi socket chưa sẵn sàng
+};
+const groupNickSubs = window.__groupNick.groupNickSubs;
+const pendingGroupNickSubs = window.__groupNick.pending;
+
+function handleGroupNicknameEvent(frameOrObj) {
+  const ev   = frameOrObj?.body ? JSON.parse(frameOrObj.body) : (frameOrObj || {});
+  const gid  = String(ev.id || ev.groupId || '');
+  const nick = (ev.nickname || '').trim();
+
+  // Sidebar: cập nhật tên
+  const nameEl = document.querySelector(`.chat-item[data-group-id="${gid}"] .chat-name`);
+  if (nameEl) {
+    const base = nameEl.getAttribute('data-base-name') || nameEl.textContent;
+    nameEl.textContent = nick || base;
+  }
+
+  // Header: nếu đang mở đúng nhóm
+  if (currentChat && currentChat.type === 'group' && String(currentChat.id) === gid) {
+    currentChat.nickname = nick || null;
+    const chatTitle = document.getElementById('chatTitle');
+    if (chatTitle) chatTitle.textContent = nick || currentChat.name;
+  }
+
+  console.debug('[WS] group nickname event', { gid, nick });
+}
+
+function subscribeGroupNickname(groupId) {
+  const key = String(groupId);
+
+  // socket chưa sẵn sàng -> chờ
+  if (!stompClient || !stompClient.connected) {
+    pendingGroupNickSubs.add(key);
+    return;
+  }
+  if (groupNickSubs.has(key)) return; // đã subscribe
+
+  // 👉 Dùng 1 handler duy nhất
+  const sub = stompClient.subscribe(`/topic/groups/${key}/nickname`, onGroupNicknameChanged);
+  groupNickSubs.set(key, sub);
+  console.debug('[WS] subscribed group nickname', key);
+}
+
+
+function ensureGroupNicknameSubscriptions(groupIds = []) {
+  (groupIds || []).forEach(id => subscribeGroupNickname(id));
+}
+
+// lưu các subscription để tránh đăng ký trùng
 function connect(event) {
   // Nếu đã kết nối thì thôi
   if (isConnected && stompClient?.connected) {
@@ -347,21 +399,35 @@ function onConnected() {
   console.log('✅ Connected to WebSocket');
   isConnected = true;
 
-  // Hủy subs cũ (nếu có) để không bị đăng ký chồng
-  Object.values(subs).forEach(s => s?.unsubscribe?.());
-  subs = {};
+  // (các subscribe khác)
   stompClient.subscribe('/topic/user-status', onUserStatusChanged);
   stompClient.subscribe('/user/queue/private',        onPrivateMessageReceived);
   stompClient.subscribe('/user/queue/friend-request', onFriendRequestReceived);
   stompClient.subscribe('/user/queue/group',          onGroupMessageReceived);
+  stompClient.subscribe('/topic/groups/meta', onGroupMetaEvent);
+
+
+
+
+  // (phần còn lại của bạn)
   loadInitialData();
   loadPendingFriendRequests();
   refreshSidebar();
   loadProfileFromDatabase();
-  // Nạp biệt danh nếu đang ở private chat
   if (currentChat?.type === 'private') {
     hydratePrivateNickname(currentChat.id);
   }
+}
+
+
+if (pendingGroupNickSubs.size) {
+  Array.from(pendingGroupNickSubs).forEach(gid => subscribeGroupNickname(gid));
+  pendingGroupNickSubs.clear();
+}
+
+// Nếu đang mở phòng nhóm khi socket vừa kết nối → đảm bảo đã subscribe
+if (currentChat?.type === 'group') {
+  subscribeGroupNickname(currentChat.id);
 }
 
 function onError(error) {
@@ -374,7 +440,6 @@ function onError(error) {
 ======================================================== */
 function onPrivateMessageReceived(payload) {
   const message = normalizeIncomingMessage(JSON.parse(payload.body)); // 👈 chuẩn hoá URL → attachments
-
   if (currentChat?.type === 'private' && blockToggle?.checked) return;
 
   const msgChatId = message.chatId ?? message.privateChatId ?? message.chat?.id;
@@ -399,7 +464,6 @@ function onPrivateMessageReceived(payload) {
   }
   updateChatListWithNewMessage();
 }
-
 function updateHeaderMemberCount(n) {
   const appStatusText = document.getElementById('appStatusText');
   if (appStatusText && Number.isFinite(n)) {
@@ -679,15 +743,18 @@ function createGroupItem(group) {
   const w = document.createElement('div');
   w.className = "chat-item p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors";
   w.onclick = () => switchToGroupChat(group);
+  w.setAttribute('data-group-id', group.id);
 
-  w.setAttribute('data-group-id', group.id); // 👈 để patch sau
   w.innerHTML = `
     <div class="flex items-center space-x-3">
       <div class="relative" data-group-avatar-for="${group.id}">
         ${renderAvatar(group.avatarUrl, initials, gradient, 10)}
       </div>
       <div class="flex-1 min-w-0">
-        <h4 class="chat-name font-medium text-gray-900 dark:text-white truncate text-sm">${group.name}</h4>
+        <h4 class="chat-name font-medium text-gray-900 dark:text-white truncate text-sm"
+            data-base-name="${(group.name || '').replace(/"/g,'&quot;')}">
+          ${group.nickname ? group.nickname : group.name}
+        </h4>
         <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${group.memberCount} thành viên</p>
       </div>
     </div>`;
@@ -743,18 +810,22 @@ function applyTitleNicknameFromStorage() {
     return;
   }
 
-  // GROUP / PUBLIC giữ nguyên logic lưu trong localStorage
-  const key  = titleKeyForCurrentChat();
-  const nick = (localStorage.getItem(key) || '').trim();
-  if (chatTitleEl) chatTitleEl.textContent = nick || defaultTitleForCurrentChat();
-  if (chatNicknameInput) chatNicknameInput.value = nick;
+  if (currentChat.type === 'group') {
+    const title = (currentChat.nickname && currentChat.nickname.trim()) ? currentChat.nickname : currentChat.name;
+    if (chatTitleEl) chatTitleEl.textContent = title;
+    if (chatNicknameInput) chatNicknameInput.value = currentChat.nickname || '';
+    return;
+  }
 }
+
 
 applyNicknameBtn?.addEventListener('click', async () => {
   if (!currentChat) return;
+
   const nickname = (chatNicknameInput?.value || '').trim();
 
   try {
+    // ===== PRIVATE =====
     if (currentChat.type === 'private') {
       const res = await fetch(`/api/private-chats/${currentChat.id}/nickname`, {
         method: 'PATCH',
@@ -766,40 +837,73 @@ applyNicknameBtn?.addEventListener('click', async () => {
       });
 
       if (!res.ok) {
-        showErrorMessage('Không lưu được biệt danh.');
+        const txt = await res.text().catch(() => '');
+        showErrorMessage(txt || 'Không lưu được biệt danh.');
         return;
       }
 
       const data = await res.json();
-
-      // ✅ Cập nhật map bằng dữ liệu server trả về
       const scope = `private:${currentChat.id}`;
-      if (currentChat.friendId) {
-        memberNickMap.set(`${scope}|id:${String(currentChat.friendId)}`, data.nickname || '');
+      const nick  = (data.nickname || '').trim();
+
+      // Cập nhật map theo dữ liệu từ server (KHÔNG dựa vào input)
+      if (currentChat.friendId != null) {
+        memberNickMap.set(`${scope}|id:${String(currentChat.friendId)}`, nick);
       }
       if (currentChat.friendUsername) {
-        memberNickMap.set(`${scope}|u:${currentChat.friendUsername}`, data.nickname || '');
+        memberNickMap.set(`${scope}|u:${currentChat.friendUsername}`, nick);
       }
 
+      // Đồng bộ lại input & header theo dữ liệu đã lưu
+      if (chatNicknameInput) chatNicknameInput.value = nick;
+      updatePrivateHeaderTitleWithNickname();
+
       showSuccessMessage('Đã lưu biệt danh!');
-      updatePrivateHeaderTitleWithNickname(); // ✅ header cập nhật sau khi lưu
       return;
     }
 
-    // GROUP: giữ nguyên cách cũ của bạn hoặc cũng dùng API nhóm nếu đã mở
-    const res = await fetch(`/api/groups/${currentChat.id}/nickname`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {})
-      },
-      body: JSON.stringify({ nickname })
-    });
-    if (!res.ok) throw new Error(await res.text().catch(()=> ''));
-    const data = await res.json();
-    const chatTitle = document.getElementById('chatTitle');
-    if (chatTitle) chatTitle.textContent = data.nickname || currentChat.name || 'Nhóm';
-    showSuccessMessage('Đã lưu biệt danh nhóm.');
+    // ===== GROUP =====
+    if (currentChat.type === 'group') {
+      const res = await fetch(`/api/groups/${currentChat.id}/nickname`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {})
+        },
+        body: JSON.stringify({ nickname })
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(txt || 'Không lưu được biệt danh.');
+      }
+
+      const data = await res.json(); // { id, type:"GROUP", nickname, ... }
+      const nick = (data.nickname || '').trim();
+
+      // Lưu lại trạng thái hiện tại
+      currentChat.nickname = nick || null;
+
+      // Cập nhật HEADER + input theo dữ liệu server
+      const title = nick || currentChat.name;
+      const chatTitle = document.getElementById('chatTitle');
+      if (chatTitle) chatTitle.textContent = title;
+      if (chatNicknameInput) chatNicknameInput.value = nick || '';
+
+      // Cập nhật sidebar ngay nếu item có sẵn, nếu không thì refresh
+      const itemNameEl = document.querySelector(`.chat-item[data-group-id="${currentChat.id}"] .chat-name`);
+      if (itemNameEl) {
+        const base = itemNameEl.getAttribute('data-base-name') || currentChat.name;
+        itemNameEl.textContent = nick || base;
+      } else {
+        scheduleSidebarRefresh();
+      }
+
+      showSuccessMessage('Đã lưu biệt danh nhóm.');
+      return;
+    }
+
+    // (Public hoặc type khác thì bỏ qua)
   } catch (err) {
     console.error(err);
     showErrorMessage('Không lưu được biệt danh.');
@@ -861,27 +965,42 @@ async function switchToGroupChat(group) {
   currentChat = {
     type: 'group',
     id: group.id,
-    name: group.name,
+    name: group.name,                       // tên gốc
+    nickname: group.nickname || null,       // server nickname (nếu list đã trả)
     avatarUrl: group.avatarUrl || ''
   };
-
-  updateChatHeader(getInitials(group.name), group.name, `${group.memberCount} thành viên`);
-
-  // nếu không có avatarUrl trong list → lấy từ DB
-  if (!currentChat.avatarUrl) {
-    try {
-      const r = await fetch(`/api/groups/${currentChat.id}`, { headers: csrfHeader ? { [csrfHeader]: csrfToken } : {} });
-      if (r.ok) {
-        const g = await r.json();
-        currentChat.avatarUrl = g.avatarUrl || '';
-      }
-    } catch {}
+  if (stompClient?.connected) {
+    stompClient.subscribe(`/topic/groups/${currentChat.id}/meta`, onGroupMetaEvent);
   }
-  applyGroupHeaderAvatar(currentChat.avatarUrl, currentChat.name);
 
-  applyTitleNicknameFromStorage();
+
+
+
+
+  // gọi API chi tiết để chắc chắn có nickname mới nhất
+  try {
+    const r = await fetch(`/api/groups/${currentChat.id}`, {headers: csrfHeader ? {[csrfHeader]: csrfToken} : {}});
+    if (r.ok) {
+      const g = await r.json();
+      currentChat.name = g.name;
+      currentChat.nickname = (g.nickname || '').trim() || null;
+      currentChat.avatarUrl = g.avatarUrl || '';
+    }
+  } catch {
+  }
+
+  // tiêu đề = nickname nếu có
+  const titleForHeader = (currentChat.nickname && currentChat.nickname.trim()) ? currentChat.nickname : currentChat.name;
+  updateChatHeader(getInitials(titleForHeader), titleForHeader, `${group.memberCount} thành viên`);
+
+  applyGroupHeaderAvatar(currentChat.avatarUrl, titleForHeader);
+
+  // KHÔNG dùng localStorage cho group-title nữa
+  if (chatNicknameInput) chatNicknameInput.value = currentChat.nickname || '';
+
   initBlockToggleForCurrentChat();
   loadGroupMemberNicknames(group.id).then(() => loadGroupChatHistory(group.id));
+
   updateGroupActionButtons(group.id);
 }
 
@@ -993,7 +1112,6 @@ function displayPrivateMessage(message, autoScroll = true) {
   const msg = typeof normalizeIncomingMessage === 'function'
       ? normalizeIncomingMessage(message)
       : message;
-
   const div = document.createElement('div');
   div.className = 'flex items-start space-x-3 message-bubble';
 
@@ -1009,7 +1127,6 @@ function displayPrivateMessage(message, autoScroll = true) {
   const time = (t && !isNaN(t))
       ? t.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})
       : new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
-
   const rawText = (msg.content || '').trim();
   const meTextHtml    = renderTextHtml(rawText, 'text-white');
   const otherTextHtml = renderTextHtml(rawText, 'text-gray-800 dark:text-gray-200');
@@ -1017,7 +1134,6 @@ function displayPrivateMessage(message, autoScroll = true) {
 
   // ✅ Không render bong bóng trống (VD: lượt 1 chỉ có URL, đã bị normalize xoá text)
   if (!meTextHtml && !otherTextHtml && !attHtml) return;
-
   if (isMe) {
     div.classList.add('justify-end');
     div.innerHTML = `
@@ -1040,11 +1156,8 @@ function displayPrivateMessage(message, autoScroll = true) {
       </div>
     `;
   }
-
-  // ✅ gắn data-mid để có thể update về sau
   const mid = msg.id ?? msg.messageId ?? null;
   if (mid != null) div.setAttribute('data-mid', String(mid));
-
   chatMessages?.appendChild(div);
   if (autoScroll) scrollToBottom();
 }
@@ -1054,7 +1167,6 @@ function displayGroupMessage(message, autoScroll = true) {
   const msg = typeof normalizeIncomingMessage === 'function'
       ? normalizeIncomingMessage(message)
       : message;
-
   const div = document.createElement('div');
   div.className = 'flex items-start space-x-3 message-bubble';
 
@@ -1070,7 +1182,6 @@ function displayGroupMessage(message, autoScroll = true) {
   const time = (t && !isNaN(t))
       ? t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
       : new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-
   const textHtml = isMe
       ? renderTextHtml(msg.content, 'text-white')
       : renderTextHtml(msg.content, 'text-gray-800 dark:text-gray-200');
@@ -1101,15 +1212,12 @@ function displayGroupMessage(message, autoScroll = true) {
       </div>
     `;
   }
-
   // ✅ gắn data-mid để có thể update về sau
   const mid = msg.id ?? msg.messageId ?? null;
   if (mid != null) div.setAttribute('data-mid', String(mid));
-
   chatMessages?.appendChild(div);
   if (autoScroll) scrollToBottom();
 }
-
 
 /* ========================================================
    FRIEND SYSTEM
@@ -1976,7 +2084,7 @@ function applyLocalNicknameEditsToMap() {
 
 
 // tách save groupchat ra riêng
-async function saveMemberNicknames(){
+async function saveMemberNicknames() {
   if (!currentChat || currentChat.type !== 'group') return; // ✅ chặn private
   const inputs = memberNicknameList?.querySelectorAll('input[data-user-id]') ?? [];
   const payload = Array.from(inputs).map(i => ({
@@ -1987,7 +2095,7 @@ async function saveMemberNicknames(){
   try {
     const res = await fetch(`/api/groups/${currentChat.id}/nicknames`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', [csrfHeader]: csrfToken },
+      headers: {'Content-Type': 'application/json', [csrfHeader]: csrfToken},
       body: JSON.stringify(payload)
     });
     if (!res.ok) throw new Error(await res.text());
@@ -2131,18 +2239,24 @@ async function refreshSidebar() {
   const myVer = ++refreshVersion;
   try {
     const [friendsRes, groupsRes] = await Promise.all([
-      fetch('/api/friends/list',    { headers: csrfHeader?{[csrfHeader]:csrfToken}:{} }),
-      fetch('/api/groups/my-groups',{ headers: csrfHeader?{[csrfHeader]:csrfToken}:{} })
+      fetch('/api/friends/list', {headers: csrfHeader ? {[csrfHeader]: csrfToken} : {}}),
+      fetch('/api/groups/my-groups', {headers: csrfHeader ? {[csrfHeader]: csrfToken} : {}})
     ]);
     if (myVer !== refreshVersion) return;          // đã có lần refresh mới hơn
 
     const friends = friendsRes.ok ? await friendsRes.json() : [];
-    const groups  = groupsRes.ok  ? await groupsRes.json()  : [];
+    const groups = groupsRes.ok ? await groupsRes.json() : [];
     renderSidebar(friends, groups);
-  } catch (err) { console.error('refreshSidebar', err); }
+    // Đăng ký lắng nghe nickname realtime cho tất cả nhóm đang có trong sidebar
+    ensureGroupNicknameSubscriptions((groups || []).map(g => g.id));
+
+  } catch (err) {
+    console.error('refreshSidebar', err);
+  }
 }
 
 const scheduleSidebarRefresh = debounce(refreshSidebar, 300);
+
 function renderSidebar(friends = [], groups = []) {
   const chatList = document.getElementById('chatList');
   if (!chatList) return;
@@ -2254,7 +2368,25 @@ function updatePrivateMessageBubble(message) {
   if (old) old.remove();               // xoá bong bóng cũ (trống)
   displayPrivateMessage(message, true); // vẽ lại bong bóng có file
 }
+function applyPrivateHeaderAvatar(url, name) {
+  const img = document.getElementById('chatHeaderAvatarImg');
+  const fallback = document.getElementById('chatHeaderAvatarFallback');
+  const fallbackText = document.getElementById('chatHeaderAvatarFallbackText');
 
+  if (!img || !fallback || !fallbackText) return;
+
+  if (url && typeof url === 'string' && url.trim() !== '') {
+    img.src = url;
+    img.classList.remove('hidden');
+    img.style.display = 'block';
+    fallback.style.display = 'none';
+  } else {
+    img.style.display = 'none';
+    img.classList.add('hidden');
+    fallback.style.display = 'flex';
+    fallbackText.textContent = getInitials(name || '');
+  }
+}
 /* ========================================================
    DÁN/KÉO THẢ FILE VÀO Ô NHẬP (tùy chọn, không thay đổi logic khác)
 ======================================================== */
@@ -2695,8 +2827,8 @@ if (!window.__groupAvatarHandlersBound) {
 }
 
 function applyGroupHeaderAvatar(url, name) {
-  const img    = document.getElementById('chatHeaderAvatarImg');
-  const fb     = document.getElementById('chatHeaderAvatarFallback');
+  const img = document.getElementById('chatHeaderAvatarImg');
+  const fb = document.getElementById('chatHeaderAvatarFallback');
   const fbText = document.getElementById('chatHeaderAvatarFallbackText');
   if (!img || !fb) return;
 
@@ -2707,14 +2839,21 @@ function applyGroupHeaderAvatar(url, name) {
   if (fbText) fbText.textContent = initials || '🌐';
 
   if (url && url.trim() !== '') {
-    img.onload  = () => { img.classList.remove('hidden'); fb.classList.add('hidden'); };
-    img.onerror = () => { img.classList.add('hidden');   fb.classList.remove('hidden'); };
+    img.onload = () => {
+      img.classList.remove('hidden');
+      fb.classList.add('hidden');
+    };
+    img.onerror = () => {
+      img.classList.add('hidden');
+      fb.classList.remove('hidden');
+    };
     img.src = __bust(url);
   } else {
     img.classList.add('hidden');
     fb.classList.remove('hidden');
   }
 }
+
 function __bust(url) { // tránh cache ảnh cũ
   if (!url) return '';
   try {
@@ -2723,6 +2862,60 @@ function __bust(url) { // tránh cache ảnh cũ
     return u.toString();
   } catch {
     return url + (url.includes('?') ? '&' : '?') + 't=' + Date.now();
+  }
+}
+
+
+function onGroupMetaEvent(payload) {
+  const message = JSON.parse(payload.body);
+
+
+
+  if (message?.event === 'GROUP_TITLE_CHANGED') {
+    const gid = String(message.groupId);
+    const title = (message.title || '').trim() || 'Nhóm';
+
+    // Nếu đang mở đúng room → cập nhật header
+    const isThisRoom = currentChat?.type === 'group' && String(currentChat.id) === gid;
+    if (isThisRoom) {
+      currentChat.name = title;
+      updateChatHeader(getInitials(title), title, document.getElementById('appStatusText')?.textContent || '');
+      applyGroupHeaderAvatar(currentChat.avatarUrl, title);
+    }
+
+    // Cập nhật menu trái ngay
+    patchGroupSidebarTitle(gid, title);
+
+    // Tuỳ chọn: refetch list để chắc chắn đồng bộ tất cả
+    scheduleSidebarRefresh?.();
+  }
+}
+
+function onGroupNicknameChanged(payload) {
+  const data = JSON.parse(payload.body || '{}'); // NicknameResponse { id, type, nickname, ... }
+  const gid = String(data.id || '');
+  const nick = (data.nickname || '').trim();
+  console.debug('[WS] nickname event', payload && payload.body);
+
+
+  // cập nhật phòng đang mở
+  if (currentChat?.type === 'group' && String(currentChat.id) === gid) {
+    currentChat.nickname = nick || null;
+    const title = nick || currentChat.name;
+    const chatTitle = document.getElementById('chatTitle');
+    if (chatTitle) chatTitle.textContent = title;
+    if (chatNicknameInput) chatNicknameInput.value = nick;
+    applyGroupHeaderAvatar(currentChat.avatarUrl, title);
+  }
+
+  // cập nhật sidebar nếu item đang có sẵn
+  const itemNameEl = document.querySelector(`.chat-item[data-group-id="${gid}"] .chat-name`);
+  if (itemNameEl) {
+    const base = itemNameEl.getAttribute('data-base-name') || itemNameEl.textContent;
+    itemNameEl.textContent = nick || base;
+  } else {
+    // nếu không tìm thấy, refresh list
+    scheduleSidebarRefresh();
   }
 }
 
@@ -2950,22 +3143,5 @@ async function updateOneMemberNickname(userId, nickname) {
     showErrorMessage('Lưu biệt danh thất bại.');
   }
 }
-function applyPrivateHeaderAvatar(url, name) {
-  const img = document.getElementById('chatHeaderAvatarImg');
-  const fallback = document.getElementById('chatHeaderAvatarFallback');
-  const fallbackText = document.getElementById('chatHeaderAvatarFallbackText');
 
-  if (!img || !fallback || !fallbackText) return;
 
-  if (url && typeof url === 'string' && url.trim() !== '') {
-    img.src = url;
-    img.classList.remove('hidden');
-    img.style.display = 'block';
-    fallback.style.display = 'none';
-  } else {
-    img.style.display = 'none';
-    img.classList.add('hidden');
-    fallback.style.display = 'flex';
-    fallbackText.textContent = getInitials(name || '');
-  }
-}

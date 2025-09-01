@@ -87,7 +87,8 @@ public class GroupChatApi {
                 group.getId(),
                 group.getName(),
                 group.getMemberCount(),
-                group.getAvatarUrl()   // 👈 thêm tham số 4
+                group.getAvatarUrl(),
+                group.getNickname()  // 👈 thêm tham số 4
         );
         return ResponseEntity.ok(groupDTO);
     }
