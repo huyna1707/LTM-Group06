@@ -148,15 +148,26 @@ public class GroupChatService {
         List<MemberNicknameDTO> out = new ArrayList<>();
         for (GroupMember gm : members) {
             User u = gm.getUser();
+            GroupChat g = gm.getGroupChat();
+
+            String role = gm.getRole() != null ? gm.getRole().name() : "MEMBER";
+            boolean isAdmin = gm.getRole() == GroupMember.GroupRole.ADMIN;
+            boolean isOwner = g.getCreatedBy() != null
+                    && java.util.Objects.equals(g.getCreatedBy().getId(), u.getId());
+
             out.add(new MemberNicknameDTO(
                     u.getId(),
                     u.getUsername(),
-                    u.getFullName(),
-                    gm.getNickname()
+                    java.util.Optional.ofNullable(u.getFullName()).orElse(u.getUsername()),
+                    gm.getNickname(),
+                    role,
+                    isOwner,
+                    isAdmin
             ));
         }
         return out;
     }
+
 
     @Transactional
     public void saveMemberNicknames(Long groupId, String updaterUsername, List<MemberNicknameDTO> payload) {
