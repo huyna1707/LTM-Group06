@@ -47,21 +47,21 @@ public class FriendController {
             @AuthenticationPrincipal UserDetails userDetails) {
 
         try {
-            // Tìm user hiện tại
             User currentUser = userRepository.findByUsername(userDetails.getUsername())
                     .orElse(null);
             if (currentUser == null) {
                 return ResponseEntity.badRequest().body("Không tìm thấy người dùng hiện tại");
             }
 
-            // Tìm user được mời
-            User targetUser = userRepository.findByUsername(request.username)
-                    .orElse(null);
-            if (targetUser == null) {
-                return ResponseEntity.badRequest().body("Không tìm thấy người dùng: " + request.username);
-            }
+            String key = request.username == null ? "" : request.username.trim();
 
-            // Không thể kết bạn với chính mình
+            // DÙNG HÀM TỔNG QUÁT: username OR phone OR email
+            Optional<User> targetOpt = userRepository.findByUsernameOrPhoneOrEmail(key);
+            if (targetOpt.isEmpty()) {
+                return ResponseEntity.badRequest().body("Không tìm thấy người dùng: " + key);
+            }
+            User targetUser = targetOpt.get();
+
             if (currentUser.getId().equals(targetUser.getId())) {
                 return ResponseEntity.badRequest().body("Không thể kết bạn với chính mình");
             }

@@ -11,7 +11,12 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, Long> {
 
     // ✅ Chỉ cần 1 giá trị → kiểm tra username, phone hoặc email
-    @Query("SELECT u FROM User u WHERE u.username = :value OR u.phone = :value OR u.email = :value")
+    @Query("""
+      SELECT u FROM User u
+      WHERE lower(u.username) = lower(:value)
+         OR replace(u.phone, ' ', '') = replace(:value, ' ', '')
+         OR lower(u.email) = lower(:value)
+    """)
     Optional<User> findByUsernameOrPhoneOrEmail(@Param("value") String value);
 
     // Các hàm hỗ trợ tìm tất cả theo username/email
