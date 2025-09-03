@@ -153,6 +153,7 @@
 
       <!-- Messages -->
       <div id="chatMessages" class="flex-1 overflow-y-auto p-6 space-y-4 scroll-smooth bg-white dark:bg-gray-800">
+        <div id="wallpaperFill" class="absolute inset-0 -z-10"></div>
         <div class="flex justify-center">
           <div class="glass-effect px-6 py-3 rounded-full text-sm text-gray-600 dark:text-gray-300">
             Chào mừng <span th:text="${full_name}">bạn</span> đến với WebChat Pro! 🎉
@@ -207,7 +208,7 @@
 <div id="addFriendModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
   <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-96">
     <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Thêm bạn mới</h2>
-    <input id="friendInput" type="text" placeholder="Nhập User ID hoặc số điện thoại" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 mb-4" />
+    <input id="friendInput" type="text" placeholder="Nhập Username/Email/SDT :" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 mb-4" />
     <div class="flex justify-end space-x-2">
       <button onclick="closeModal('addFriendModal')" class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">Hủy</button>
       <button id="confirmAddFriend" class="px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-teal-500 text-white">Thêm</button>
@@ -224,7 +225,7 @@
       <input name="name" id="groupName" type="text" placeholder="Tên nhóm"
              class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 mb-3" />
 
-      <input name="membersRaw" id="groupMembers" type="text" placeholder="Nhập User ID/SĐT/Email (phân cách bằng dấu ,)"
+      <input name="membersRaw" id="groupMembers" type="text" placeholder="Nhập Username/SĐT/Email (phân cách bằng dấu ,)"
              class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 mb-4" />
 
       <!-- CSRF Token (TỰ ĐỘNG thêm nhờ Spring Security) -->
@@ -395,10 +396,24 @@
           <span class="wp-label">Lưới</span>
         </button>
       </div>
-      <div class="mt-3 flex items-center gap-2">
-        <input id="wpUrl" type="text" placeholder="Dán URL ảnh (jpg/png/webp)..." class="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
-        <button id="applyWpUrl" class="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white">Áp dụng</button>
+      <div class="mt-3 space-y-2">
+        <label class="block text-sm font-medium text-gray-800 dark:text-gray-200">
+          Hình nền đoạn chat
+        </label>
+        <div class="flex items-center gap-3">
+          <!-- Nút chọn file -->
+          <button id="wpFileBtn"
+                  class="flex items-center gap-2 px-4 py-2 rounded-lg
+                   bg-indigo-600 hover:bg-indigo-700 text-white shadow">
+            📂 <span>Chọn ảnh…</span>
+          </button>
+          <input id="wpFile" type="file" accept="image/*" class="hidden">
+          <span class="text-xs text-gray-500 dark:text-gray-400">
+      Ảnh nền sẽ áp dụng cho tất cả thành viên đoạn chat này
+    </span>
+        </div>
       </div>
+
       <div class="mt-2 flex items-center gap-2">
         <button id="resetWp" class="px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200">Xóa hình nền</button>
         <span class="text-xs text-gray-500 dark:text-gray-400">Áp dụng trực tiếp cho vùng tin nhắn.</span>
@@ -463,13 +478,20 @@
       </div>
     </div>
 
-    <div class="flex items-center justify-between">
+    <div id="blockRow" class="flex items-center justify-between">
       <div>
         <div class="font-medium text-gray-800 dark:text-gray-200">Chặn</div>
         <p class="text-xs text-gray-500 dark:text-gray-400">Không thể gửi/nhận tin nhắn.</p>
       </div>
-      <label class="inline-flex items-center cursor-pointer"><input type="checkbox" id="blockToggle" class="sr-only peer"><span class="w-10 h-6 bg-gray-300 peer-checked:bg-red-500 rounded-full relative after:content-[''] after:absolute after:w-5 after:h-5 after:bg-white after:rounded-full after:top-0.5 after:left-0.5 after:transition-all peer-checked:after:translate-x-4"></span></label>
+      <label class="inline-flex items-center cursor-pointer">
+        <input type="checkbox" id="blockToggle" class="sr-only peer">
+        <span class="w-10 h-6 bg-gray-300 peer-checked:bg-red-500 rounded-full relative
+                 after:content-[''] after:absolute after:w-5 after:h-5 after:bg-white
+                 after:rounded-full after:top-0.5 after:left-0.5 after:transition-all
+                 peer-checked:after:translate-x-4"></span>
+      </label>
     </div>
+
 
     <div class="flex items-center justify-between">
       <div>

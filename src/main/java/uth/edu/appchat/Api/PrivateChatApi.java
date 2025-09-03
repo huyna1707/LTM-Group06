@@ -3,22 +3,22 @@ package uth.edu.appchat.Api;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import uth.edu.appchat.Dtos.AttachmentDTO;
+import uth.edu.appchat.Dtos.MessageContentDTO;
+import uth.edu.appchat.Models.ChatClear;
 import uth.edu.appchat.Models.PrivateChat;
 import uth.edu.appchat.Models.PrivateMessage;
 import uth.edu.appchat.Models.User;
+import uth.edu.appchat.Repositories.ChatClearRepository;
 import uth.edu.appchat.Repositories.PrivateChatRepository;
 import uth.edu.appchat.Repositories.PrivateMessageRepository;
 import uth.edu.appchat.Repositories.UserRepository;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
-import uth.edu.appchat.Dtos.AttachmentDTO;
-import uth.edu.appchat.Dtos.MessageContentDTO;
+
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
@@ -29,10 +29,12 @@ public class PrivateChatApi {
     private final PrivateChatRepository privateChatRepository;
     private final PrivateMessageRepository privateMessageRepository;
     private final UserRepository userRepository;
+    private final ChatClearRepository chatClearRepository;
     private final SimpMessagingTemplate messaging;
 
-
+    // ===========================
     // Lấy danh sách chat riêng của user hiện tại
+    // ===========================
     @GetMapping("/my-chats")
     public ResponseEntity<?> getMyPrivateChats(Authentication auth) {
         try {
@@ -47,7 +49,7 @@ public class PrivateChatApi {
                         "chatId", chat.getId(),
                         "otherUser", Map.of(
                                 "username", otherUser.getUsername(),
-                                "fullName", otherUser.getFullName() != null ? otherUser.getFullName() : otherUser.getUsername(),
+                                "fullName", Optional.ofNullable(otherUser.getFullName()).orElse(otherUser.getUsername()),
                                 "status", otherUser.getStatus() != null ? otherUser.getStatus().toString() : "ONLINE"
                         ),
                         "lastMessageAt", chat.getLastMessageAt() != null ? chat.getLastMessageAt().toString() : "",
@@ -63,7 +65,9 @@ public class PrivateChatApi {
         }
     }
 
+    // ===========================
     // Tạo hoặc lấy chat riêng với user khác
+    // ===========================
     @PostMapping("/start-chat")
     public ResponseEntity<?> startPrivateChat(@RequestBody Map<String, String> request, Authentication auth) {
         try {
@@ -96,7 +100,7 @@ public class PrivateChatApi {
                     "chatId", chat.getId(),
                     "otherUser", Map.of(
                             "username", targetUser.getUsername(),
-                            "fullName", targetUser.getFullName() != null ? targetUser.getFullName() : targetUser.getUsername(),
+                            "fullName", Optional.ofNullable(targetUser.getFullName()).orElse(targetUser.getUsername()),
                             "status", targetUser.getStatus() != null ? targetUser.getStatus().toString() : "ONLINE"
                     ),
                     "createdAt", chat.getCreatedAt().toString()
@@ -108,7 +112,9 @@ public class PrivateChatApi {
         }
     }
 
-    // Lấy tin nhắn của chat riêng
+    // ===========================
+    // Lấy tin nhắn của chat riêng (lọc theo clearedAt của user hiện tại)
+    // ===========================
     @GetMapping("/{chatId}/messages")
     public ResponseEntity<?> getPrivateChatMessages(@PathVariable Long chatId, Authentication auth) {
         try {
@@ -117,16 +123,28 @@ public class PrivateChatApi {
 
             PrivateChat chat = privateChatRepository.findById(chatId)
                     .orElseThrow(() -> new RuntimeException("Chat not found"));
+
             if (!chat.containsUser(currentUser)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Access denied"));
             }
 
-            List<PrivateMessage> messages = privateMessageRepository.findByPrivateChatOrderByCreatedAtAsc(chat);
+            // lấy clearedAt theo user hiện tại
+            ChatClear.ChatClearId id = new ChatClear.ChatClearId(currentUser.getId(), "private", chatId);
+            LocalDateTime clearedAt = chatClearRepository.findById(id)
+                    .map(ChatClear::getClearedAt)
+                    .orElse(LocalDateTime.MIN);
 
-            List<Map<String, Object>> messageList = messages.stream().map(msg -> {
+            // nếu clearedAt > now (đồng hồ lệch) => bỏ lọc
+            if (clearedAt.isAfter(LocalDateTime.now())) {
+                clearedAt = LocalDateTime.MIN;
+            }
+
+            List<PrivateMessage> messages =
+                    privateMessageRepository.findByPrivateChatAndCreatedAtAfterOrderByCreatedAtAsc(chat, clearedAt);
+
+            // map DTO trả về
+            List<Map<String, Object>> dto = messages.stream().map(msg -> {
                 User sender = msg.getSender();
-                boolean isText = msg.getMessageType() == PrivateMessage.MessageType.TEXT;
-
                 Map<String, Object> base = new LinkedHashMap<>();
                 base.put("id", msg.getId());
                 base.put("sender", Map.of(
@@ -137,11 +155,10 @@ public class PrivateChatApi {
                 base.put("messageType", msg.getMessageType().toString());
                 base.put("isRead", Optional.ofNullable(msg.getIsRead()).orElse(false));
 
-                if (isText) {
+                if (msg.getMessageType() == PrivateMessage.MessageType.TEXT) {
                     base.put("content", Optional.ofNullable(msg.getContent()).orElse(""));
                     base.put("attachments", List.of());
                 } else {
-                    // Tạo 1 attachment từ URL trong content
                     String url = Optional.ofNullable(msg.getContent()).orElse("");
                     String type = switch (msg.getMessageType()) {
                         case IMAGE -> "image";
@@ -151,16 +168,17 @@ public class PrivateChatApi {
                     Map<String, Object> att = new LinkedHashMap<>();
                     att.put("type", type);
                     att.put("url", url);
-                    att.put("name", url.substring(url.lastIndexOf('/') + 1));
+                    att.put("name", url.contains("/") ? url.substring(url.lastIndexOf('/') + 1) : url);
                     att.put("size", null);
+
                     base.put("content", "");
                     base.put("attachments", List.of(att));
                 }
                 return base;
             }).collect(Collectors.toList());
 
+            return ResponseEntity.ok(dto);
 
-            return ResponseEntity.ok(messageList);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of(
                     "error", "Failed to get messages: " + e.getMessage()
@@ -168,7 +186,9 @@ public class PrivateChatApi {
         }
     }
 
-    // Gửi tin nhắn riêng
+    // ===========================
+    // Gửi tin nhắn riêng (realtime cho TEXT & ATTACHMENTS)
+    // ===========================
     @PostMapping("/{chatId}/send")
     public ResponseEntity<?> sendPrivateMessage(@PathVariable Long chatId,
                                                 @RequestBody MessageContentDTO req,
@@ -191,6 +211,7 @@ public class PrivateChatApi {
 
             User other = chat.getOtherUser(me);
 
+            // TEXT
             if (!content.isBlank()) {
                 PrivateMessage m = new PrivateMessage();
                 m.setPrivateChat(chat);
@@ -201,7 +222,24 @@ public class PrivateChatApi {
                 m.setIsRead(false);
                 m = privateMessageRepository.save(m);
 
+                Map<String, Object> dto = new LinkedHashMap<>();
+                dto.put("id", m.getId());
+                dto.put("chatId", chatId);
+                dto.put("type", "CHAT");
+                dto.put("messageType", "TEXT");
+                dto.put("sender", Map.of(
+                        "username", me.getUsername(),
+                        "fullName", Optional.ofNullable(me.getFullName()).orElse(me.getUsername())
+                ));
+                dto.put("content", m.getContent());
+                dto.put("attachments", List.of());
+                dto.put("timestamp", m.getCreatedAt().toString());
+
+                messaging.convertAndSendToUser(other.getUsername(), "/queue/private", dto);
+                messaging.convertAndSendToUser(me.getUsername(),    "/queue/private", dto);
             }
+
+            // ATTACHMENTS
             for (AttachmentDTO a : atts) {
                 String url = Optional.ofNullable(a.getUrl()).orElse("").trim();
                 if (url.isEmpty()) continue;
@@ -253,6 +291,7 @@ public class PrivateChatApi {
 
             chat.setLastMessageAt(LocalDateTime.now());
             privateChatRepository.save(chat);
+
             return ResponseEntity.ok(Map.of("ok", true));
 
         } catch (Exception e) {
@@ -260,4 +299,33 @@ public class PrivateChatApi {
         }
     }
 
+    // ===========================
+    // Xoá đoạn chat ở phía user hiện tại (không ảnh hưởng người kia)
+    // ===========================
+    @PostMapping("/{chatId}/clear")
+    public ResponseEntity<?> clearPrivateChat(@PathVariable Long chatId, Authentication auth) {
+        try {
+            User currentUser = userRepository.findByUsername(auth.getName())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            PrivateChat chat = privateChatRepository.findById(chatId)
+                    .orElseThrow(() -> new RuntimeException("Chat not found"));
+
+            if (!chat.containsUser(currentUser)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error","Access denied"));
+            }
+
+            ChatClear.ChatClearId id = new ChatClear.ChatClearId(currentUser.getId(), "private", chatId);
+            ChatClear rec = chatClearRepository.findById(id)
+                    .orElseGet(() -> new ChatClear(id, LocalDateTime.now()));
+
+            // tạo “khoảng hở” 1ns để tin mới ngay-sau-khi-clear không bị lọc nhầm
+            rec.setClearedAt(LocalDateTime.now().minusNanos(1));
+            chatClearRepository.save(rec);
+
+            return ResponseEntity.ok(Map.of("ok", true));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error","Failed to clear chat: "+e.getMessage()));
+        }
+    }
 }

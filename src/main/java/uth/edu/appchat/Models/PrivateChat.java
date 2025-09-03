@@ -132,5 +132,8 @@ public class PrivateChat {
         if (u.equals(user1)) this.clearedAtUser1 = t;
         else if (u.equals(user2)) this.clearedAtUser2 = t;
     }
+
+    @Column(name = "wallpaper_url")
+    private String wallpaperUrl;
 }
 

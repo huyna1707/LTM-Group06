@@ -105,17 +105,82 @@ function addAttachmentPreview(att) {
 // === Render attachments trong bong bóng
 function renderAttachmentsHtml(attachments) {
   if (!Array.isArray(attachments) || attachments.length === 0) return '';
-  return attachments.map(a => {
-    if (!a || !a.url) return '';
-    const name = (a.name || a.url).split('/').pop();
-    if (a.type === 'image') {
-      return `<div class="mt-2"><img src="${a.url}" alt="${name}" class="max-h-72 rounded-lg object-contain"></div>`;
-    }
-    if (a.type === 'video') {
-      return `<div class="mt-2"><video src="${a.url}" controls class="max-h-72 rounded-lg"></video></div>`;
-    }
-    return `<div class="mt-2"><a href="${a.url}" target="_blank" rel="noopener" class="underline break-all">📎 ${name}</a></div>`;
-  }).join('');
+  const imgs = [];
+  const vids = [];
+  const files = [];
+
+  for (const a of attachments) {
+    if (!a || !a.url) continue;
+    const t = (a.type || detectFileTypeFromUrl(a.url));
+    if (t === 'image') imgs.push(a);
+    else if (t === 'video') vids.push(a);
+    else files.push(a);
+  }
+
+  const parts = [];
+
+  // ẢNH: lưới 2 cột, lazy-load
+  if (imgs.length) {
+    parts.push(
+        `<div class="mt-2 grid grid-cols-2 gap-2">
+        ${imgs.map(a => {
+          const url = safeUrl(a.url);
+          const name = escapeHtml((a.name || a.url).split('/').pop());
+          return `
+            <a href="${url}" target="_blank" rel="noopener noreferrer"
+               class="block overflow-hidden rounded-lg">
+              <img src="${url}" alt="${name}" loading="lazy"
+                   class="w-full h-48 object-cover"
+                   onerror="this.style.objectFit='contain'">
+            </a>`;
+        }).join('')}
+      </div>`
+    );
+  }
+
+  // VIDEO: preload metadata
+  for (const v of vids) {
+    const url = safeUrl(v.url);
+    const name = escapeHtml((v.name || v.url).split('/').pop());
+    parts.push(
+        `<div class="mt-2">
+        <video src="${url}" title="${name}" controls preload="metadata"
+               class="w-full max-h-72 rounded-lg"></video>
+      </div>`
+    );
+  }
+
+  // FILE THƯỜNG: thẻ tập tin có icon + info + actions
+  for (const f of files) {
+    const url = safeUrl(f.url);
+    const nameRaw = (f.name || f.url).split('/').pop();
+    const name = escapeHtml(nameRaw);
+    const ext = getFileExt(nameRaw);
+    const sizeText = formatBytes(f.size);
+    const icon = iconByExt(ext);
+
+    parts.push(
+        `<div class="mt-2 flex items-center gap-3 p-3 rounded-lg border
+              bg-white/70 dark:bg-gray-800/50">
+    <div class="text-2xl flex-shrink-0">${icon}</div>
+    <div class="min-w-0 flex-1">
+      <div class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+        ${name}
+      </div>
+      <div class="text-xs text-gray-500 dark:text-gray-400">
+        ${ext ? ext.toUpperCase() : 'FILE'}${sizeText ? ' • ' + sizeText : ''}
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="${url}" target="_blank" rel="noopener noreferrer"
+         class="text-sm px-2 py-1 rounded border
+                hover:bg-gray-100 dark:hover:bg-gray-700">Mở</a>
+    </div>
+  </div>`
+    );
+  }
+
+  return parts.join('');
 }
 // --- Nhận diện URL file & chuẩn hoá message nhận về (URL → attachments[])
 function detectFileTypeFromUrl(url = '') {
@@ -124,6 +189,45 @@ function detectFileTypeFromUrl(url = '') {
   if (u.match(/\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/)) return 'video';
   return 'file';
 }
+
+function formatBytes(bytes) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n < 0) return '';
+  const units = ['B','KB','MB','GB','TB'];
+  let v = n, i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  const fixed = (v < 10 && i > 0) ? v.toFixed(1) : Math.round(v).toString();
+  return `${fixed} ${units[i]}`;
+}
+
+function safeUrl(u) {
+  const s = String(u || '').trim();
+  if (!s) return '#';
+  if (/^javascript:/i.test(s)) return '#';
+  // Cho phép http/https và đường dẫn nội bộ (/uploads/..)
+  if (/^https?:\/\//i.test(s) || s.startsWith('/')) return s;
+  return '#';
+}
+
+function getFileExt(nameOrUrl = '') {
+  const base = String(nameOrUrl).split('?')[0].split('#')[0];
+  const m = base.match(/\.([a-z0-9]+)$/i);
+  return (m ? m[1] : '').toLowerCase();
+}
+
+function iconByExt(ext) {
+  switch (ext) {
+    case 'pdf': return '📰';
+    case 'doc': case 'docx': return '📝';
+    case 'xls': case 'xlsx': return '📊';
+    case 'ppt': case 'pptx': return '📈';
+    case 'zip': case 'rar': case '7z': return '🗜️';
+    case 'mp3': case 'wav': return '🎵';
+    case 'mp4': case 'mov': case 'm4v': return '🎬';
+    default: return '📄';
+  }
+}
+
 function looksLikeHttpOrUploads(s) {
   return /^https?:\/\//i.test((s || '').trim()) || /^\/uploads\//i.test((s || '').trim());
 }
@@ -148,7 +252,7 @@ function normalizeIncomingMessage(msg) {
   }
   return m;
 }
-
+const privateMsgIndex = new Map();
 const groupMsgIndex = new Map();
 let stompClient = null;
 let username = null;
@@ -291,6 +395,29 @@ function connect(event) {
   event?.preventDefault?.();
 }
 
+function onBlockEventReceived(payload) {
+  const event = JSON.parse(payload.body);
+  if (!event || !currentChat || currentChat.type !== 'private') return;
+
+  const blockedBy = event.blockedBy; // Giả định server gửi { blockedBy: 'username', chatId: id, blocked: true/false }
+  const chatId = event.chatId;
+  const isBlocked = !!event.blocked;
+
+  if (String(currentChat.id) !== String(chatId)) return; // Không phải chat hiện tại
+
+  // Cập nhật toggle và UI
+  blockToggle.checked = isBlocked;
+  applyBlockStateUI(isBlocked);
+  localStorage.setItem(blockKey(), isBlocked ? '1' : '0');
+
+  // Hiển thị thông báo
+  const msg = isBlocked
+      ? `Bạn đã bị chặn bởi ${blockedBy}. Không thể nhắn tin nữa.`
+      : `Chat đã được mở khóa bởi ${blockedBy}.`;
+  showNotificationToast(msg, isBlocked ? 'error' : 'success');
+  showErrorMessage(msg); // Hoặc showSuccessMessage nếu unlock
+}
+
 function onConnected() {
   console.log('✅ Connected to WebSocket');
   isConnected = true;
@@ -301,7 +428,7 @@ function onConnected() {
   stompClient.subscribe('/user/queue/friend-request', onFriendRequestReceived);
   stompClient.subscribe('/user/queue/group',          onGroupMessageReceived);
   stompClient.subscribe('/topic/groups/meta', onGroupMetaEvent);
-
+  stompClient.subscribe('/user/queue/block-events', onBlockEventReceived);
 
 
 
@@ -334,21 +461,50 @@ function onError(error) {
 /* ========================================================
    MESSAGE HANDLERS
 ======================================================== */
+// Cập nhật onPrivateMessageReceived để xử lý block-event
 function onPrivateMessageReceived(payload) {
-  const message = JSON.parse(payload.body);
+  const message = normalizeIncomingMessage(JSON.parse(payload.body));
+  if (message.type === 'block-event') {
+    if (message.action === 'block') {
+      showErrorMessage(`Bạn đã bị ${message.blockedBy} chặn. Không thể gửi tin nhắn.`);
+      document.getElementById('messageInput')?.setAttribute('disabled', true);
+      document.getElementById('sendButton')?.setAttribute('disabled', true);
+    } else if (message.action === 'unblock') {
+      showSuccessMessage(`Bạn đã được ${message.blockedBy} bỏ chặn.`);
+      document.getElementById('messageInput')?.removeAttribute('disabled');
+      document.getElementById('sendButton')?.removeAttribute('disabled');
+    }
+    return;
+  }
+
   if (currentChat?.type === 'private' && blockToggle?.checked) return;
 
   const msgChatId = message.chatId ?? message.privateChatId ?? message.chat?.id;
   if (currentChat?.type === 'private' && currentChat?.id == msgChatId) {
+    const hasAtt = Array.isArray(message.attachments) && message.attachments.length > 0;
+    const mid = message.id || null;
+
+    if (mid) {
+      const prev = privateMsgIndex.get(mid);
+      if (prev) {
+        if (prev.hasAtt || !hasAtt) return;
+        updatePrivateMessageBubble(message);
+        privateMsgIndex.set(mid, { hasAtt: true });
+        return;
+      } else {
+        displayPrivateMessage(message, true);
+        privateMsgIndex.set(mid, { hasAtt });
+        return;
+      }
+    }
     try { displayPrivateMessage(message, true); } catch (e) { console.error(e); }
+    appendMessage(message);
+    scrollMessagesBottom();
+  }
+  if (document.hidden) {
+    showNotificationToast(`Tin nhắn mới từ ${message.sender}`, 'info', () => switchToPrivateChat(message.chatId));
   }
   updateChatListWithNewMessage();
-}
-function updateHeaderMemberCount(n) {
-  const appStatusText = document.getElementById('appStatusText');
-  if (appStatusText && Number.isFinite(n)) {
-    appStatusText.textContent = `${n} thành viên`;
-  }
 }
 
 function onGroupMessageReceived(payload) {
@@ -367,6 +523,7 @@ function onGroupMessageReceived(payload) {
     showNotificationToast(url ? 'Avatar nhóm đã được cập nhật.' : 'Avatar nhóm đã được gỡ.', 'info');
     return;
   }
+
 
   // === RỜI NHÓM ===
   if (message?.event === 'GROUP_MEMBER_LEFT') {
@@ -552,7 +709,7 @@ async function loadPrivateChatHistory(chatId) {
     if (res.ok) {
       const messages = await res.json();
       chatMessages.innerHTML = '';
-      messages.forEach(m => displayPrivateMessage(m, false));
+      messages.forEach(m => displayPrivateMessage(normalizeIncomingMessage(m), false));
       scrollToBottom();
     }
   } catch (e) { console.error('Error loading private chat history:', e); }
@@ -818,8 +975,15 @@ async function switchToPrivateChat(friend) {
         friendUsername: friend.username
       };
       groupActions?.classList.add('hidden');
-      updateChatHeader(getInitials(currentChat.name), `Chat với ${currentChat.name}`, 'Chat riêng tư');
+      clearWallpaperUI();                   // 1) XÓA NỀN NGAY
+      await syncWallpaperForCurrentChat();
+      if (stompClient?.connected) subscribeWallpaperTopic();
 
+      updateChatHeader(getInitials(currentChat.name), `Chat với ${currentChat.name}`, 'Chat riêng tư');
+      const otherAvatar = (friend && (friend.avatarUrl || friend.avatar_url))
+          || (friend?.username && avatarCache.get(friend.username))
+          || null;
+      applyPrivateHeaderAvatar(otherAvatar, currentChat.name);
       // 👉 nạp nickname partner từ server
       await hydratePrivateNickname(currentChat.id);
 
@@ -846,6 +1010,10 @@ async function switchToGroupChat(group) {
     nickname: group.nickname || null,       // server nickname (nếu list đã trả)
     avatarUrl: group.avatarUrl || ''
   };
+  clearWallpaperUI();                   // 1) XÓA NỀN NGAY
+  await syncWallpaperForCurrentChat();  // 2) Nạp nền từ server (nếu có)
+  if (stompClient?.connected) subscribeWallpaperTopic();
+  initBlockToggleForCurrentChat();
   if (stompClient?.connected) {
     stompClient.subscribe(`/topic/groups/${currentChat.id}/meta`, onGroupMetaEvent);
   }
@@ -898,16 +1066,23 @@ function sendMessage(evt) {
   }
 }
 
+
 async function sendPrivateMessage(content, attachments = []) {
+  if (blockToggle?.checked) {
+    showErrorMessage('Chat bị chặn. Không gửi được tin nhắn.');
+    return;
+  }
   try {
     const res = await fetch(`/api/private-chat/${currentChat.id}/send`, {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {}) },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(csrfHeader && csrfToken ? { [csrfHeader]: csrfToken } : {}) },
       body: JSON.stringify({ content: content || '', attachments })
     });
     // Không display ở đây; chờ onPrivateMessageReceived đẩy về để hiển thị
     if (!res.ok) console.error('Send private failed:', await res.text());
-  } catch (e) { console.error('Error sending private message:', e); }
+  } catch (e) {
+    console.error('Error sending private message:', e);
+  }
 }
 
 async function sendGroupMessage(content, attachments = []) {
@@ -985,10 +1160,14 @@ function resolveDisplayNameFromMap(senderLike) {
 }
 
 function displayPrivateMessage(message, autoScroll = true) {
+  // Chuẩn hoá: URL thuần -> attachments
+  const msg = typeof normalizeIncomingMessage === 'function'
+      ? normalizeIncomingMessage(message)
+      : message;
   const div = document.createElement('div');
   div.className = 'flex items-start space-x-3 message-bubble';
 
-  const s = normalizeSender(message);
+  const s = normalizeSender(msg);
   const isMe = s.username === username;
 
   const displayName = resolveDisplayNameFromMap(s);
@@ -996,61 +1175,23 @@ function displayPrivateMessage(message, autoScroll = true) {
   const gradient = pickGradient(simpleHash(s.username || String(s.id || '')));
   const avatarUrl = s.avatarUrl || (s.username && avatarCache.get(s.username)) || null;
 
-  const t = message.timestamp ? new Date(message.timestamp) : null;
-  const time = (t && !isNaN(t)) ? t.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})
-      : new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
-  const rawText = (message.content || '').trim();
-  const meTextHtml = renderTextHtml(rawText, 'text-white');
-  const otherTextHtml = renderTextHtml(rawText, 'text-gray-800 dark:text-gray-200');
-  if (isMe) {
-    div.classList.add('justify-end');
-    div.innerHTML = `
-      <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md">
-       ${meTextHtml}
-        ${renderAttachmentsHtml(message.attachments)}
-        <div class="flex items-center justify-end mt-1"><span class="text-xs text-purple-100">${time}</span></div>
-      </div>
-      ${renderAvatar(avatarUrl, initials, gradient, 8)}
-    `;
-  } else {
-    div.classList.add('items-start');
-    div.innerHTML = `
-      ${renderAvatar(avatarUrl, initials, gradient, 8)}
-      <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md">
-        <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">${displayName}</div>
-        ${otherTextHtml}
-        ${renderAttachmentsHtml(message.attachments)}
-        <div class="flex items-center justify-end mt-1"><span class="text-xs text-gray-500 dark:text-gray-400">${time}</span></div>
-      </div>
-    `;
-  }
-  chatMessages?.appendChild(div);
-  if (autoScroll) scrollToBottom();
-}
-
-function displayGroupMessage(message, autoScroll = true) {
-  const div = document.createElement('div');
-  div.className = 'flex items-start space-x-3 message-bubble';
-
-  const s = normalizeSender(message);
-  const isMe = s.username === username;
-
-  const displayName = resolveDisplayNameFromMap(s);
-  const initials = getInitials(displayName);
-  const gradient = pickGradient(simpleHash(s.username || String(s.id || '')));
-  const avatarUrl = s.avatarUrl || (s.username && avatarCache.get(s.username)) || null;
-
-  const t = message.timestamp ? new Date(message.timestamp) : null;
+  const t = msg.timestamp ? new Date(msg.timestamp) : null;
   const time = (t && !isNaN(t))
-      ? t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-      : new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      ? t.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})
+      : new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
+  const rawText = (msg.content || '').trim();
+  const meTextHtml    = renderTextHtml(rawText, 'text-white');
+  const otherTextHtml = renderTextHtml(rawText, 'text-gray-800 dark:text-gray-200');
+  const attHtml       = renderAttachmentsHtml(msg.attachments);
 
+  // ✅ Không render bong bóng trống (VD: lượt 1 chỉ có URL, đã bị normalize xoá text)
+  if (!meTextHtml && !otherTextHtml && !attHtml) return;
   if (isMe) {
     div.classList.add('justify-end');
     div.innerHTML = `
       <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md break-words">
-        ${renderTextHtml(message.content, 'text-white')}
-        ${renderAttachmentsHtml(message.attachments)}
+        ${meTextHtml || '' }
+        ${attHtml     || '' }
         <div class="flex items-center justify-end mt-1"><span class="text-xs text-purple-100">${time}</span></div>
       </div>
       ${renderAvatar(avatarUrl, initials, gradient, 8)}
@@ -1061,12 +1202,71 @@ function displayGroupMessage(message, autoScroll = true) {
       ${renderAvatar(avatarUrl, initials, gradient, 8)}
       <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md break-words">
         <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">${displayName}</div>
-        ${renderTextHtml(message.content, 'text-gray-800 dark:text-gray-200')}
-        ${renderAttachmentsHtml(message.attachments)}
+        ${otherTextHtml || '' }
+        ${attHtml       || '' }
         <div class="flex items-center justify-end mt-1"><span class="text-xs text-gray-500 dark:text-gray-400">${time}</span></div>
       </div>
     `;
   }
+  const mid = msg.id ?? msg.messageId ?? null;
+  if (mid != null) div.setAttribute('data-mid', String(mid));
+  chatMessages?.appendChild(div);
+  if (autoScroll) scrollToBottom();
+}
+
+function displayGroupMessage(message, autoScroll = true) {
+  // Chuẩn hoá: URL thuần -> attachments
+  const msg = typeof normalizeIncomingMessage === 'function'
+      ? normalizeIncomingMessage(message)
+      : message;
+  const div = document.createElement('div');
+  div.className = 'flex items-start space-x-3 message-bubble';
+
+  const s = normalizeSender(msg);
+  const isMe = s.username === username;
+
+  const displayName = resolveDisplayNameFromMap(s);
+  const initials = getInitials(displayName);
+  const gradient = pickGradient(simpleHash(s.username || String(s.id || '')));
+  const avatarUrl = s.avatarUrl || (s.username && avatarCache.get(s.username)) || null;
+
+  const t = msg.timestamp ? new Date(msg.timestamp) : null;
+  const time = (t && !isNaN(t))
+      ? t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+      : new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  const textHtml = isMe
+      ? renderTextHtml(msg.content, 'text-white')
+      : renderTextHtml(msg.content, 'text-gray-800 dark:text-gray-200');
+  const attHtml  = renderAttachmentsHtml(msg.attachments);
+
+  // ✅ Không render bong bóng trống
+  if (!textHtml && !attHtml) return;
+
+  if (isMe) {
+    div.classList.add('justify-end');
+    div.innerHTML = `
+      <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-2xl rounded-tr-md px-4 py-3 max-w-xs lg:max-w-md break-words">
+        ${textHtml || '' }
+        ${attHtml  || '' }
+        <div class="flex items-center justify-end mt-1"><span class="text-xs text-purple-100">${time}</span></div>
+      </div>
+      ${renderAvatar(avatarUrl, initials, gradient, 8)}
+    `;
+  } else {
+    div.classList.add('items-start');
+    div.innerHTML = `
+      ${renderAvatar(avatarUrl, initials, gradient, 8)}
+      <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-xs lg:max-w-md break-words">
+        <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">${displayName}</div>
+        ${textHtml || '' }
+        ${attHtml  || '' }
+        <div class="flex items-center justify-end mt-1"><span class="text-xs text-gray-500 dark:text-gray-400">${time}</span></div>
+      </div>
+    `;
+  }
+  // ✅ gắn data-mid để có thể update về sau
+  const mid = msg.id ?? msg.messageId ?? null;
+  if (mid != null) div.setAttribute('data-mid', String(mid));
   chatMessages?.appendChild(div);
   if (autoScroll) scrollToBottom();
 }
@@ -1219,18 +1419,269 @@ window.addEventListener('keydown', (e)=>{ if (e.key==='Escape') closeChatSetting
 
 // Wallpaper
 const wpPresetsEl  = $("#wpPresets");
-const wpUrlInput   = $("#wpUrl");
-const applyWpUrlBtn= $("#applyWpUrl");
 const resetWpBtn   = $("#resetWp");
-const WP_PRESETS = { none:{type:'preset',key:'none'}, 'grad-purple':{type:'preset',key:'grad-purple'}, 'grad-blue':{type:'preset',key:'grad-blue'}, 'grad-pink':{type:'preset',key:'grad-pink'}, dots:{type:'preset',key:'dots'}, grid:{type:'preset',key:'grid'} };
-function applyWallpaperStyle(p){ if (!chatMessages) return; chatMessages.style.backgroundImage='none'; chatMessages.style.backgroundSize=''; chatMessages.style.backgroundPosition=''; chatMessages.style.backgroundAttachment=''; chatMessages.style.backgroundColor=''; if (!p) return; if (p.type==='url'){ chatMessages.style.backgroundImage=`url("${p.url}")`; chatMessages.style.backgroundSize='cover'; chatMessages.style.backgroundPosition='center'; chatMessages.style.backgroundAttachment='fixed'; return; } switch(p.key){ case 'grad-purple': chatMessages.style.backgroundImage='linear-gradient(135deg,#f5e1ff,#e7d4ff)'; break; case 'grad-blue': chatMessages.style.backgroundImage='linear-gradient(135deg,#dbeafe,#bfdbfe)'; break; case 'grad-pink': chatMessages.style.backgroundImage='linear-gradient(135deg,#ffe4e6,#fecdd3)'; break; case 'dots': chatMessages.style.backgroundImage='radial-gradient(#e5e7eb 1.2px, transparent 1.2px), radial-gradient(#e5e7eb 1.2px, transparent 1.2px)'; chatMessages.style.backgroundSize='20px 20px,20px 20px'; chatMessages.style.backgroundPosition='0 0,10px 10px'; chatMessages.style.backgroundColor='#ffffff'; break; case 'grid': chatMessages.style.backgroundImage='linear-gradient(rgba(0,0,0,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.06) 1px, transparent 1px)'; chatMessages.style.backgroundSize='24px 24px,24px 24px'; chatMessages.style.backgroundColor='#ffffff'; break; default: break; } }
-function setActivePresetButton(key){ document.querySelectorAll('#wpPresets .wp-item').forEach(btn=>{ btn.setAttribute('aria-pressed', btn.getAttribute('data-wp')===key ? 'true':'false'); }); }
-function saveWallpaper(d){ localStorage.setItem('chatWallpaper', JSON.stringify(d)); }
-function loadWallpaper(){ try{return JSON.parse(localStorage.getItem('chatWallpaper')||'null');}catch{return null;} }
-(function initWallpaper(){ const saved = loadWallpaper(); if (saved){ applyWallpaperStyle(saved); if (saved.type==='preset') setActivePresetButton(saved.key); else setActivePresetButton(''); } else { setActivePresetButton('none'); } })();
-wpPresetsEl?.addEventListener('click', (e)=>{ const target = e.target.closest('.wp-item'); if (!target) return; const key = target.getAttribute('data-wp'); const data = WP_PRESETS[key] || WP_PRESETS.none; applyWallpaperStyle(data); setActivePresetButton(key); saveWallpaper(data); });
-applyWpUrlBtn?.addEventListener('click', ()=>{ const url=(wpUrlInput?.value||'').trim(); if (!url) return; const data={type:'url',url}; applyWallpaperStyle(data); setActivePresetButton(''); saveWallpaper(data); });
-resetWpBtn?.addEventListener('click', ()=>{ const data=WP_PRESETS.none; applyWallpaperStyle(data); setActivePresetButton('none'); saveWallpaper(data); if (wpUrlInput) wpUrlInput.value=''; });
+const wpFileBtn    = document.querySelector("#wpFileBtn");
+const wpFileInput  = document.querySelector("#wpFile");
+
+const WP_PRESETS = {
+  none:        { type: 'preset', key: 'none' },
+  'grad-purple': { type: 'preset', key: 'grad-purple' },
+  'grad-blue':   { type: 'preset', key: 'grad-blue' },
+  'grad-pink':   { type: 'preset', key: 'grad-pink' },
+  dots:          { type: 'preset', key: 'dots' },
+  grid:          { type: 'preset', key: 'grid' }
+};
+
+function clearWallpaperUI() {
+  if (!chatMessages) return;
+
+  // reset lớp trên (chatMessages)
+  const s = chatMessages.style;
+  s.backgroundImage = 'none';
+  s.backgroundSize = '';
+  s.backgroundRepeat = '';
+  s.backgroundPosition = '';
+  s.backgroundAttachment = '';
+  s.backgroundColor = '';
+
+  // reset lớp dưới (wallpaperFill)
+  const fill = document.getElementById('wallpaperFill');
+  if (fill) {
+    fill.style.backgroundImage = 'none';
+    fill.style.backgroundSize = '';
+    fill.style.backgroundRepeat = '';
+    fill.style.backgroundPosition = '';
+  }
+}
+
+// luôn hiển thị đầy đủ ảnh (contain)
+function applyWallpaperStyle(p) {
+  if (!chatMessages) return;
+  const fill = document.getElementById('wallpaperFill');
+
+  // reset lớp trên
+  const s = chatMessages.style;
+  s.backgroundImage = 'none';
+  s.backgroundSize = '';
+  s.backgroundRepeat = '';
+  s.backgroundPosition = '';
+  s.backgroundAttachment = '';
+  s.backgroundColor = '';
+
+  // reset lớp dưới
+  if (fill) {
+    fill.style.backgroundImage = 'none';
+    fill.style.backgroundSize = '';
+    fill.style.backgroundRepeat = '';
+    fill.style.backgroundPosition = '';
+  }
+
+  if (!p) return;
+
+  if (p.type === 'url') {
+    // Lớp trên: đủ ảnh (contain)
+    s.backgroundImage    = `url("${p.url}")`;
+    s.backgroundSize     = 'contain';
+    s.backgroundRepeat   = 'no-repeat';
+    s.backgroundPosition = 'center';
+    s.backgroundAttachment = 'scroll';
+    s.backgroundColor    = '#222';
+
+    // Lớp dưới: phủ kín (cover) blur fill
+    if (fill) {
+      fill.style.backgroundImage = `url("${p.url}")`;
+      fill.style.backgroundSize = 'cover';
+      fill.style.backgroundRepeat = 'no-repeat';
+      fill.style.backgroundPosition = 'center';
+    }
+    return;
+  }
+
+
+  // giữ preset cũ nếu cần
+  switch (p.key) {
+    case 'grad-purple': s.backgroundImage = 'linear-gradient(135deg,#f5e1ff,#e7d4ff)'; break;
+    case 'grad-blue':   s.backgroundImage = 'linear-gradient(135deg,#dbeafe,#bfdbfe)'; break;
+    case 'grad-pink':   s.backgroundImage = 'linear-gradient(135deg,#ffe4e6,#fecdd3)'; break;
+    case 'dots':
+      s.backgroundImage = 'radial-gradient(#e5e7eb 1.2px, transparent 1.2px), radial-gradient(#e5e7eb 1.2px, transparent 1.2px)';
+      s.backgroundSize  = '20px 20px,20px 20px';
+      s.backgroundPosition = '0 0,10px 10px';
+      s.backgroundColor = '#ffffff';
+      break;
+    case 'grid':
+      s.backgroundImage = 'linear-gradient(rgba(0,0,0,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.06) 1px, transparent 1px)';
+      s.backgroundSize  = '24px 24px,24px 24px';
+      s.backgroundColor = '#ffffff';
+      break;
+  }
+}
+
+
+function setActivePresetButton(key) {
+  document.querySelectorAll('#wpPresets .wp-item').forEach(btn => {
+    btn.setAttribute('aria-pressed', btn.getAttribute('data-wp') === key ? 'true' : 'false');
+  });
+}
+
+// === ROOM HELPERS ===
+function roomKey() {
+  if (!currentChat) return null;
+  return `${currentChat.type}:${currentChat.id}`;
+}
+function wallpaperPostUrl() {
+  if (!currentChat) return null;
+  return currentChat.type === 'private'
+      ? `/api/wallpaper/private/${currentChat.id}`
+      : `/api/wallpaper/group/${currentChat.id}`;
+}
+function wallpaperGetUrl() {
+  if (!currentChat) return null;
+  return currentChat.type === 'private'
+      ? `/api/wallpaper/private/${currentChat.id}`
+      : `/api/wallpaper/group/${currentChat.id}`;
+}
+function wallpaperTopic() {
+  const key = roomKey();
+  return key ? `/topic/wallpaper/${key}` : null;
+}
+
+// preset click
+wpPresetsEl?.addEventListener('click', (e) => {
+  const target = e.target.closest('.wp-item');
+  if (!target) return;
+  const key = target.getAttribute('data-wp');
+  const data = WP_PRESETS[key] || WP_PRESETS.none;
+  applyWallpaperStyle(data);
+  setActivePresetButton(key);
+});
+
+// reset
+resetWpBtn?.addEventListener('click', async () => {
+  if (!currentChat) return;
+
+  const url = wallpaperPostUrl();
+  if (!url) return showErrorMessage('Chưa chọn đoạn chat.');
+
+  try {
+    const headers = (csrfHeader && csrfToken) ? { [csrfHeader]: csrfToken } : {};
+    const res = await fetch(url, { method: 'DELETE', headers });
+
+    if (!res.ok) throw new Error(await res.text());
+
+    // Áp dụng nền basic (preset none)
+    const data = WP_PRESETS.none;
+    applyWallpaperStyle(data);
+    setActivePresetButton('none');
+
+    showSuccessMessage('Đã xóa hình nền, quay về mặc định.');
+  } catch (e) {
+    console.error(e);
+    showErrorMessage('Không thể xóa hình nền.');
+  }
+});
+
+
+// upload file
+wpFileBtn?.addEventListener('click', () => wpFileInput?.click());
+
+wpFileInput?.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  // validate cơ bản
+  if (!file.type.startsWith('image/')) return showErrorMessage('Vui lòng chọn tệp ảnh.');
+
+  const url = wallpaperPostUrl();
+  if (!url) return showErrorMessage('Chưa chọn đoạn chat.');
+
+  try {
+    const form = new FormData();
+    form.append('file', file);
+
+    const headers = (csrfHeader && csrfToken) ? { [csrfHeader]: csrfToken } : {};
+    const res = await fetch(url, { method: 'POST', headers, body: form });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json(); // { url: "/uploads/wallpapers/xxx.png" }
+
+    applyWallpaperStyle({ type: 'url', url: data.url });
+    setActivePresetButton('');
+
+    showSuccessMessage('Đã cập nhật hình nền cho đoạn chat.');
+  } catch (err) {
+    console.error(err);
+    showErrorMessage('Tải ảnh thất bại.');
+  } finally {
+    if (wpFileInput) wpFileInput.value = '';
+  }
+});
+
+// sync từ server khi mở phòng
+async function syncWallpaperForCurrentChat() {
+  const url = wallpaperGetUrl();
+  if (!url) { clearWallpaperUI(); return; }
+
+  try {
+    const headers = (csrfHeader && csrfToken) ? { [csrfHeader]: csrfToken } : {};
+    const res = await fetch(url, { headers });
+
+    if (!res.ok) { // 204/404 hoặc lỗi => xoá nền
+      clearWallpaperUI();
+      setActivePresetButton('none');
+      return;
+    }
+
+    const data = await res.json(); // { url?:string, preset?:string }
+    if (data?.url) {
+      applyWallpaperStyle({ type: 'url', url: data.url });
+      setActivePresetButton('');
+    } else if (data?.preset) {
+      const p = WP_PRESETS[data.preset] || WP_PRESETS.none;
+      applyWallpaperStyle(p);
+      setActivePresetButton(data.preset);
+    } else {
+      clearWallpaperUI();
+      setActivePresetButton('none');
+    }
+  } catch (e) {
+    console.warn('syncWallpaper error', e);
+    clearWallpaperUI(); // lỗi mạng => xoá nền để tránh dính ảnh cũ
+    setActivePresetButton('none');
+  }
+}
+
+
+// realtime sync qua STOMP
+let wpSubscription = null;
+function subscribeWallpaperTopic() {
+  if (!stompClient?.connected) return;
+  try { wpSubscription?.unsubscribe(); } catch {}
+  const topic = wallpaperTopic();
+  if (!topic) return;
+
+  wpSubscription = stompClient.subscribe(topic, (frame) => {
+    try {
+      const evt = JSON.parse(frame.body); // { url?:string, preset?:string }
+      // Guard: chỉ áp dụng nếu vẫn đang ở phòng này
+      const expectedTopic = wallpaperTopic();
+      if (topic !== expectedTopic) return;
+
+      if (evt.url) {
+        applyWallpaperStyle({ type: 'url', url: evt.url });
+        setActivePresetButton('');
+      } else if (evt.preset) {
+        const p = WP_PRESETS[evt.preset] || WP_PRESETS.none;
+        applyWallpaperStyle(p);
+        setActivePresetButton(evt.preset);
+      }
+    } catch (e) {
+      console.error('Wallpaper event parse error', e);
+    }
+  });
+
+}
+
+
 
 // Big Emoji
 const bigEmojiToggle = $("#bigEmojiToggle");
@@ -1241,6 +1692,7 @@ bigEmojiToggle?.addEventListener('change', (e)=>{ const v=e.target.checked; loca
    BLOCK / MUTE / CLEAR  (có đồng bộ server cho PRIVATE)
 ======================================================== */
 const blockToggle = $("#blockToggle");
+const blockRow    = $("#blockRow");
 
 // key lưu local per-room
 function blockKey() {
@@ -1262,18 +1714,20 @@ function applyBlockStateUI(v){
 async function syncPrivateBlockFromServer() {
   if (!currentChat || currentChat.type !== 'private' || !blockToggle) return;
   try {
-    // friendId đã được set trong switchToPrivateChat
     const res = await fetch(`/api/blocks/users/${currentChat.friendId}/status`, {
       headers: { [csrfHeader]: csrfToken }
     });
     if (res.ok) {
-      const { blocked } = await res.json();
-      blockToggle.checked = !!blocked;
-      // cập nhật UI + LS theo server
+      const data = await res.json();
+      const blocked = !!data.blocked || !!data.mutualBlocked; // Hỗ trợ hai chiều nếu server trả về
+      blockToggle.checked = blocked;
       localStorage.setItem(blockKey(), blocked ? '1' : '0');
       applyBlockStateUI(blocked);
     }
-  } catch (e) { console.error(e); }
+  } catch (e) {
+    console.error(e);
+    applyBlockStateUI(false); // Fallback nếu lỗi
+  }
 }
 
 function initBlockFromStorage() {
@@ -1283,43 +1737,59 @@ function initBlockFromStorage() {
 }
 
 // gọi khi đổi phòng:
-window.initBlockToggleForCurrentChat = function () {
+function initBlockToggleForCurrentChat() {
   if (!blockToggle) return;
-  if (!currentChat) { applyBlockStateUI(false); return; }
 
-  if (currentChat.type === 'group') {
-    initBlockFromStorage();         // dùng local
+  if (!currentChat) {
+    applyBlockStateUI(false);
+    blockRow?.classList.add('hidden');      // Ẩn hàng khi chưa có phòng
     return;
   }
-  if (currentChat.type === 'private') {
-    syncPrivateBlockFromServer();   // đồng bộ server
-  }
-};
 
+  if (currentChat.type === 'group') {
+    // Ẩn CẢ HÀNG "Chặn" khi là group
+    blockRow?.classList.add('hidden');
+    // Reset UI & local state để tránh khoá composer
+    blockToggle.checked = false;
+    localStorage.removeItem(blockKey());
+    applyBlockStateUI(false);
+    return;
+  }
+
+  if (currentChat.type === 'private') {
+    // Hiện lại CẢ HÀNG khi là private
+    blockRow?.classList.remove('hidden');
+    // Đồng bộ trạng thái chặn từ server
+    syncPrivateBlockFromServer();
+  }
+}
+
+
+// Cập nhật blockToggle listener để gọi API blocks
 blockToggle?.addEventListener('change', async (e) => {
   const v = e.target.checked;
-  // Cập nhật UI & local ngay
+  if (!currentChat || currentChat.type !== 'private') return;
+
+  const friendId = currentChat.friendId; // Giả định friendId là ID của người kia
   localStorage.setItem(blockKey(), v ? '1' : '0');
   applyBlockStateUI(v);
 
-  // Nếu là private => gọi server
-  if (currentChat && currentChat.type === 'private') {
-    try {
-      const url = `/api/blocks/users/${currentChat.friendId}`;
-      const res = await fetch(url, {
-        method: v ? 'POST' : 'DELETE',
-        headers: { [csrfHeader]: csrfToken }
-      });
-      if (!res.ok) throw new Error(await res.text());
-      showSuccessMessage(v ? 'Đã chặn người này.' : 'Đã bỏ chặn.');
-    } catch (err) {
-      console.error(err);
-      // rollback toggle + UI + LS nếu lỗi
-      e.target.checked = !v;
-      localStorage.setItem(blockKey(), e.target.checked ? '1' : '0');
-      applyBlockStateUI(e.target.checked);
-      showErrorMessage('Không cập nhật được trạng thái chặn.');
-    }
+  try {
+    const url = `/api/blocks/users/${friendId}`;
+    const method = v ? 'POST' : 'DELETE';
+    const res = await fetch(url, {
+      method: method,
+      headers: { [csrfHeader]: csrfToken }
+    });
+    if (!res.ok) throw new Error(await res.text());
+
+    showSuccessMessage(v ? 'Đã chặn người này .' : 'Đã bỏ chặn.');
+  } catch (err) {
+    console.error(err);
+    e.target.checked = !v;
+    localStorage.setItem(blockKey(), e.target.checked ? '1' : '0');
+    applyBlockStateUI(e.target.checked);
+    showErrorMessage('Không cập nhật được trạng thái chặn.');
   }
 });
 
@@ -2204,10 +2674,41 @@ function clearComposer() {
    CẬP NHẬT BONG BÓNG NHÓM KHI FILE ĐẾN TRỄ (fallback thêm mới)
 ======================================================== */
 function updateGroupMessageBubble(message) {
-  // Nếu trước đó chưa đánh data-mid, xử lý đơn giản: thêm bong bóng mới
-  displayGroupMessage(message, true);
+  const mid = message.id;
+  if (!mid) return displayGroupMessage(message, true);
+  const sel = `[data-mid="${window.CSS?.escape ? CSS.escape(String(mid)) : String(mid).replace(/"/g,'\\"')}"]`;
+  const old = chatMessages?.querySelector(sel);
+  if (old) old.remove();               // xoá bong bóng trước (có thể trống)
+  displayGroupMessage(message, true);  // vẽ lại bong bóng có file
 }
 
+function updatePrivateMessageBubble(message) {
+  const mid = message.id;
+  if (!mid) return displayPrivateMessage(message, true);
+  const sel = `[data-mid="${window.CSS?.escape ? CSS.escape(String(mid)) : String(mid).replace(/"/g,'\\"')}"]`;
+  const old = chatMessages?.querySelector(sel);
+  if (old) old.remove();               // xoá bong bóng cũ (trống)
+  displayPrivateMessage(message, true); // vẽ lại bong bóng có file
+}
+function applyPrivateHeaderAvatar(url, name) {
+  const img = document.getElementById('chatHeaderAvatarImg');
+  const fallback = document.getElementById('chatHeaderAvatarFallback');
+  const fallbackText = document.getElementById('chatHeaderAvatarFallbackText');
+
+  if (!img || !fallback || !fallbackText) return;
+
+  if (url && typeof url === 'string' && url.trim() !== '') {
+    img.src = url;
+    img.classList.remove('hidden');
+    img.style.display = 'block';
+    fallback.style.display = 'none';
+  } else {
+    img.style.display = 'none';
+    img.classList.add('hidden');
+    fallback.style.display = 'flex';
+    fallbackText.textContent = getInitials(name || '');
+  }
+}
 /* ========================================================
    DÁN/KÉO THẢ FILE VÀO Ô NHẬP (tùy chọn, không thay đổi logic khác)
 ======================================================== */
@@ -2957,7 +3458,7 @@ async function updateOneMemberNickname(userId, nickname) {
     showSuccessMessage('Đã lưu biệt danh.');
     // reload danh sách để phản ánh biệt danh mới
     await loadGroupMemberNicknames(currentChat.id);
-    // (tùy chọn) render lại history hiện tại, nếu muốn
+    // (tùy chọn) render lại history hiện tại, nếu m uốn
     // await loadGroupChatHistory(currentChat.id);
   } catch (e) {
     console.error(e);

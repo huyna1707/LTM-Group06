@@ -200,3 +200,9 @@
   color: #6b7280;                  /* gray-500 */
 }
 .dark .avatar-note { color: #9ca3af; } /* gray-400 */
+
+
+#wallpaperFill {
+  filter: blur(20px) brightness(0.8) saturate(1.2);
+  background-color: #222; /* fallback khi ảnh chưa load */
+}

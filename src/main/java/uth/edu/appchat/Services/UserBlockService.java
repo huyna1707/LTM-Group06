@@ -1,18 +1,22 @@
 package uth.edu.appchat.Services;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uth.edu.appchat.Models.User;
 import uth.edu.appchat.Models.UserBlock;
 import uth.edu.appchat.Repositories.UserBlockRepository;
 import uth.edu.appchat.Repositories.UserRepository;
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 public class UserBlockService {
     private final UserBlockRepository blockRepo;
     private final UserRepository userRepo;
+    private final SimpMessagingTemplate messaging; // Inject SimpMessagingTemplate
 
     public boolean isBlocked(Long meId, Long targetId) {
         return blockRepo.existsByBlockerIdAndBlockedId(meId, targetId);
@@ -31,10 +35,25 @@ public class UserBlockService {
 
         UserBlock b = UserBlock.builder().blocker(me).blocked(target).build();
         blockRepo.save(b);
+
+        // Gửi event STOMP đến người bị chặn
+        Map<String, Object> blockEvent = new HashMap<>();
+        blockEvent.put("type", "block-event");
+        blockEvent.put("action", "block");
+        blockEvent.put("blockedBy", me.getUsername());
+        messaging.convertAndSendToUser(target.getUsername(), "/queue/private", blockEvent);
     }
 
     @Transactional
     public void unblockUser(Long meId, Long targetId) {
         blockRepo.deleteByBlockerIdAndBlockedId(meId, targetId);
+
+        // Gửi event STOMP đến người bị chặn khi bỏ chặn
+        User me = userRepo.findById(meId).orElseThrow(() -> new RuntimeException("Không tìm thấy bạn"));
+        Map<String, Object> blockEvent = new HashMap<>();
+        blockEvent.put("type", "block-event");
+        blockEvent.put("action", "unblock");
+        blockEvent.put("blockedBy", me.getUsername());
+        messaging.convertAndSendToUser(userRepo.findById(targetId).get().getUsername(), "/queue/private", blockEvent);
     }
 }

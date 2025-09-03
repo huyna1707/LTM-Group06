@@ -74,5 +74,8 @@ public class GroupChat {
 
     public int getMemberCount() { return members != null ? members.size() : 0; }
     public boolean isValidGroup() { return getMemberCount() >= 3; }
+
+    @Column(name = "wallpaper_url")
+    private String wallpaperUrl;
 }
 
